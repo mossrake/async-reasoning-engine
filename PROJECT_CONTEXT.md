@@ -26,7 +26,7 @@ Instead of building complex multi-agent systems or forced belief revision framew
 ### 1. Structured Assertion Tuples
 Every piece of evidence and hypothesis becomes a timestamped tuple:
 ```
-(content, timestamp, conf:X.XX, status, source, metadata)
+(content, timestamp, conf:X.XX, status, age_minutes, imp:X.XX, source)
 ```
 
 This provides the LLM with complete structured context containing all hypotheses, evidence, and relationships simultaneously.
@@ -41,16 +41,16 @@ Fast ingestion with queued processing during analysis prevents reactive oscillat
 Confidence-based status transitions (active/weakened/dormant) rather than deletion/replacement, allowing theories to persist and be revived when circumstances change.
 
 ### 5. Investigation Lifecycle Management
-**NEW**: Complete investigation tracking with persistent results storage:
+Complete investigation tracking with persistent results storage:
 - Unique investigation IDs for each reasoning session
 - Context clearing operations that capture results before reset
 - Investigation results retrieval for historical analysis
 - Automatic investigation sequencing and timestamping
 
 ### 6. Simple Loop Counter Failsafe
-**NEW**: Additional protection against infinite reasoning:
+Additional protection against infinite reasoning:
 - Hard maximum loop count per reasoning session (default: 10)
-- Simple counter that resets with each new reasoning session
+- Simple counter that resets with each reasoning session
 - Failsafe triggers before other termination conditions
 - Configurable limits for different deployment scenarios
 
@@ -74,18 +74,18 @@ Confidence-based status transitions (active/weakened/dormant) rather than deleti
 - Fast, non-blocking evidence ingestion (<10ms)
 - Validates and categorizes incoming assertions
 - Maintains responsiveness during reasoning sessions
-- **NEW**: Processes single operation queue with clear boundary logic
-- **NEW**: Handles context clearing operations asynchronously
+- Processes single operation queue with clear boundary logic
+- Handles context clearing operations asynchronously
 
 **Deep Thought Reasoning Thread:**
 - Monitors context version changes
 - Executes protected analytical reasoning
 - Manages hypothesis confidence evolution
 - Detects completion and oscillation patterns
-- **NEW**: Simple loop counter failsafe protection
+- Simple loop counter failsafe protection
 
 ### Queue Architecture
-**NEW**: Unified single-queue design replaces separate queues:
+Unified single-queue design:
 - All operations (evidence, hypotheses, clears, queries) use single queue
 - Clear operations act as boundaries for reasoning sessions
 - Operations before clear are processed in batches
@@ -98,8 +98,8 @@ Confidence-based status transitions (active/weakened/dormant) rather than deleti
 context_version: int          # Incremented on each context change
 last_reasoned_version: int    # Last version processed by reasoning
 context_change_event          # Thread synchronization primitive
-reasoning_loop_count: int     # NEW: Simple counter for current session
-max_reasoning_loops: int      # NEW: Configurable failsafe limit
+reasoning_loop_count: int     # Simple counter for current session
+max_reasoning_loops: int      # Configurable failsafe limit
 ```
 
 ### Hash-Based Termination
@@ -116,7 +116,7 @@ Recognizes 2-state and 3-state oscillation patterns in reasoning cycles. When ev
 Revival mechanism: Dormant hypotheses first return to active status, then gain confidence in subsequent cycles.
 
 ### Investigation Management
-**NEW**: Complete investigation lifecycle:
+Complete investigation lifecycle:
 ```python
 investigation_id = engine.clear_context("investigation_name")
 # Reasoning happens...
@@ -136,18 +136,18 @@ Results include:
 - Context processing: <50ms for categorization and queuing
 - Deep thought sessions: 10-60 seconds for complete analysis
 - Reasoning cycles: 1-5 seconds per cycle within deep thought
-- **NEW**: Context clearing: <100ms for result capture
+- Context clearing: <100ms for result capture
 
 ### Memory Management
 - Context compression: Automatic removal of low-importance items
 - Hash history: Rolling window for oscillation detection
 - Queue management: Bounded queues with overflow handling
-- **NEW**: Investigation results storage (SQLite stub implementation)
+- Investigation results storage (SQLite stub implementation)
 
 ### Scaling Considerations
 - Configurable token budgets with intelligent compression
 - Hard caps on reasoning duration and cycle count
-- **NEW**: Simple loop counter provides additional failsafe protection
+- Simple loop counter provides additional failsafe protection
 - RLock protection for thread-safe context modifications
 
 ## Business Value Proposition
@@ -164,7 +164,7 @@ Decision-makers see the full landscape of possibilities, including theories that
 ### Revival Capability
 Previously dismissed explanations can return to consideration when new evidence makes them relevant again.
 
-### **NEW**: Investigation Continuity
+### Investigation Continuity
 Complete tracking of reasoning sessions with retrievable historical results enables:
 - Comparative analysis across different evidence sets
 - Historical decision audit trails
@@ -177,22 +177,22 @@ Complete tracking of reasoning sessions with retrievable historical results enab
 - **reasoning.py**: Core engine implementation with dual-thread architecture
 - **webservice.py**: FastAPI web service providing HTTP endpoints
 - Separation of concerns between fast assertion processing and deep reasoning
-- **NEW**: Complete web API with investigation management endpoints
+- Complete web API with investigation management endpoints
 
 ### Error Handling Strategy
 - LLM failure recovery with graceful degradation
 - Context corruption protection with hash validation
 - Thread synchronization with deadlock prevention
 - Timeout handling for all operations
-- **NEW**: Multiple failsafe layers (hash-based, sterile cycles, loop counter)
+- Multiple failsafe layers (hash-based, sterile cycles, loop counter)
 
 ### Monitoring and Observability
 - Real-time status reporting (engine state, hypothesis counts)
 - Performance metrics (processing times, cycle efficiency)
 - Reasoning audit trails (complete hypothesis evolution history)
 - Oscillation alerts (automatic detection of analytical ambiguity)
-- **NEW**: Deep thought progress reporting with detailed cycle analysis
-- **NEW**: Investigation result persistence and retrieval
+- Deep thought progress reporting with detailed cycle analysis
+- Investigation result persistence and retrieval
 
 ## Future Enhancements
 
@@ -209,8 +209,8 @@ Complete tracking of reasoning sessions with retrievable historical results enab
 - Database persistence for context state durability and recovery
 - Microservice deployment with containerized reasoning services
 - Real-time dashboards for live reasoning state visualization
-- **NEW**: Webhook integrations for Salesforce, monitoring systems
-- **NEW**: RESTful API with OpenAPI documentation
+- Webhook integrations for Salesforce, monitoring systems
+- RESTful API with OpenAPI documentation
 
 ## Technical Dependencies
 
@@ -236,19 +236,19 @@ AZURE_OPENAI_VERSION      # API version (default: 2024-02-15-preview)
 - Immutable assertion content with mutable metadata
 - Structured tuple format for LLM consumption
 - Version tracking for reasoning cycle coordination
-- **NEW**: Investigation boundary management with result capture
+- Investigation boundary management with result capture
 
 ### Thread Safety
 - RLock protection for all context modifications
 - Queue-based communication between threads
 - Event-based synchronization for reasoning triggers
-- **NEW**: Single queue design eliminates race conditions
+- Single queue design eliminates race conditions
 
 ### LLM Integration
 - Structured prompts for different reasoning tasks
 - Error handling and retry logic for LLM failures
 - Token budget management with intelligent compression
-- **NEW**: Azure OpenAI compatible DSPy implementation
+- Azure OpenAI compatible DSPy implementation
 
 ### Anti-Patterns Avoided
 - **Rumination Prevention**: Explicit instructions to LLM to avoid re-analyzing existing items
@@ -293,18 +293,18 @@ POST /config/max_loops  # Configure failsafe parameters
 - Follow PEP 8 Python style guidelines
 - Comprehensive docstrings for all public methods
 - Type hints for all function parameters and return values
-- **NEW**: Pydantic models for all API request/response schemas
+- Pydantic models for all API request/response schemas
 
 ### Testing Philosophy
 - Unit tests for core reasoning logic
 - Integration tests for API endpoints
 - Performance benchmarks for timing-critical operations
-- **NEW**: API endpoint testing with FastAPI test client
+- API endpoint testing with FastAPI test client
 
 ### Documentation Standards
 - Technical decisions documented in code comments
 - Architecture decisions captured in design documents
-- **NEW**: API documentation auto-generated from OpenAPI schemas
+- API documentation auto-generated from OpenAPI schemas
 
 ## Intellectual Property Notes
 

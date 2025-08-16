@@ -35,21 +35,22 @@ Instead of complex multi-agent systems, we use a single language model managing 
 class ContextItem:
     content: str                # Evidence or hypothesis content
     timestamp: datetime         # Creation time
-    item_type: ItemType        # EVIDENCE | HYPOTHESIS | REVIVAL
+    item_type: ItemType        # EVIDENCE | HYPOTHESIS | REVIVAL | PATTERN | SUMMARY
     status: Status             # ACTIVE | WEAKENED | DORMANT
     confidence: float          # 0.1 to 0.95 confidence level
     importance: float          # System-assessed importance
     source: str               # Evidence source identifier
     tags: List[str]           # Categorization tags
+    access_count: int         # Number of times accessed
     reasoning_version: int    # Last reasoning cycle processed
 ```
 
 ### Assertion Tuple Format
 Evidence is presented to the LLM as structured tuples:
 ```
-(Enterprise Q4 sales exceeded targets by 30%, 14:23, conf:0.85, active, sales_system)
-(SMB market requires different approach, 14:18, conf:0.70, active, llm_generation)
-(Infrastructure scaling is adequate, 14:12, conf:0.40, weakened, llm_generation)
+(Enterprise Q4 sales exceeded targets by 30%, 14:23, conf:0.85, active, 5min_ago, imp:0.80, sales_system)
+(SMB market requires different approach, 14:18, conf:0.70, active, 10min_ago, imp:0.90, llm_generation)
+(Infrastructure scaling is adequate, 14:12, conf:0.40, weakened, 15min_ago, imp:0.70, llm_generation)
 ```
 
 ## Installation
@@ -171,10 +172,11 @@ curl -X GET "http://localhost:8000/investigations/q4_analysis_20250815_143022_00
 max_context_tokens: int = 4000        # LLM context window budget
 compression_threshold: int = 3200     # Trigger context compression
 max_sterile_cycles: int = 3           # Reasoning termination threshold
-max_reasoning_cycles: int = 10        # Hard reasoning limit (legacy)
+max_reasoning_cycles: int = 10        # Hard reasoning limit
 max_reasoning_loops: int = 10         # Simple loop counter failsafe
 oscillation_detection_window: int = 6 # Pattern detection window
 max_deep_thought_minutes: int = 5     # Deep thought timeout
+assertion_batch_size: int = 5        # Evidence processing batch size
 ```
 
 ### Failsafe Configuration
@@ -271,7 +273,7 @@ The `/health` endpoint provides detailed health assessment:
 During deep thought sessions, the engine provides detailed cycle-by-cycle progress:
 - Confidence updates for each hypothesis
 - Status changes (active/weakened/dormant transitions)
-- New hypothesis generation
+- Hypothesis generation and deletion tracking
 - Revival detection
 - Evidence impact assessment
 
@@ -330,7 +332,7 @@ Single-queue design with boundary operations:
 - No race conditions between operation types
 
 ### Multiple Failsafe Layers
-- **Simple Loop Counter**: Prevents runaway reasoning (most important)
+- **Simple Loop Counter**: Prevents runaway reasoning (primary failsafe)
 - **Sterile Cycle Detection**: Stops when no progress is made
 - **Oscillation Detection**: Preserves valid contradictory interpretations
 - **Deep Thought Timeout**: Time-based reasoning limits
@@ -357,7 +359,7 @@ AZURE_OPENAI_ENDPOINT=https://your-endpoint.openai.azure.com/
 AZURE_OPENAI_DEPLOYMENT=your-deployment-name
 
 # Optional
-AZURE_OPENAI_VERSION=2024-02-15-preview
+AZURE_OPENAI_VERSION="2024-10-21"
 MAX_REASONING_LOOPS=10
 DEEP_THOUGHT_TIMEOUT_MINUTES=5
 ```
@@ -386,11 +388,10 @@ pip install -r requirements.txt
 python webservice.py dev  # Start in development mode with auto-reload
 ```
 
-## Documentation
+## Documentation -- see docs/
 
-- [Technical Overview](docs/technical-overview.pdf) - Complete technical implementation details
-- [Living in the Contradiction](docs/living-in-contradiction.pdf) - Conceptual framework and motivation
-- [API Documentation](http://localhost:8000/docs) - Interactive OpenAPI documentation
+- [Technical Overview] - Complete technical implementation details
+- [Living in the Contradiction] - Conceptual framework and motivation
 
 ## Support
 
@@ -398,7 +399,7 @@ For issues and questions, please use the GitHub Issues tracker.
 
 ## Changelog
 
-### Latest Updates
+### Recent Updates
 - **Investigation Management**: Complete investigation lifecycle with persistent results
 - **Simple Loop Counter Failsafe**: Additional protection against infinite reasoning
 - **Web Service API**: Production-ready FastAPI service with comprehensive endpoints
