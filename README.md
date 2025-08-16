@@ -70,8 +70,8 @@ pip install fastapi uvicorn dspy-ai python-multipart
 ```bash
 export AZURE_OPENAI_KEY="your-key"
 export AZURE_OPENAI_ENDPOINT="your-endpoint"
-export AZURE_OPENAI_DEPLOYMENT="your-deployment"
-export AZURE_OPENAI_VERSION="2024-02-15-preview"
+export AZURE_OPENAI_DEPLOYMENT="your-deployment" (used: gpt-4o-mini)
+export AZURE_OPENAI_VERSION="2024-08-01-preview"
 ```
 
 ## Quick Start
@@ -210,6 +210,11 @@ engine.force_stop_reasoning("Analysis taking too long")
 2. **Confidence Adjustment**: Hypotheses gain/lose confidence based on supporting/contradicting evidence
 3. **Status Transitions**: Active → Weakened → Dormant based on confidence thresholds
 4. **Revival Process**: Dormant hypotheses return to active status when supporting evidence emerges
+
+### LLM-Driven Reasoning
+- **Direct State Management**: LLM analyzes context and directly sets hypothesis confidence/status
+- **JSON Decision Format**: Structured output eliminates keyword parsing complexity
+- **Context-Only Analysis**: Pure Markov chain - each step only depends on current context window
 
 ### Deep Thought Mode
 When evidence accumulates, the engine enters "deep thought":

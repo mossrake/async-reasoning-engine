@@ -226,8 +226,8 @@ Complete tracking of reasoning sessions with retrievable historical results enab
 ```bash
 AZURE_OPENAI_KEY          # Azure OpenAI API key
 AZURE_OPENAI_ENDPOINT     # Azure OpenAI service endpoint
-AZURE_OPENAI_DEPLOYMENT   # Azure OpenAI deployment name
-AZURE_OPENAI_VERSION      # API version (default: 2024-02-15-preview)
+AZURE_OPENAI_DEPLOYMENT   # Azure OpenAI deployment name (used: gpt-4o-mini)
+AZURE_OPENAI_VERSION      # API version (used: 2024-08-01-preview)
 ```
 
 ## Design Patterns and Best Practices
