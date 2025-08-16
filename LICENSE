@@ -1,0 +1,37 @@
+AI Trust Chain Framework
+Copyright (C) 2025 Mossrake Group, LLC
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as published
+by the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For the complete text of the GNU Affero General Public License version 3,
+please visit: https://www.gnu.org/licenses/agpl-3.0.en.html
+
+IMPORTANT NOTICE:
+
+This software implements the AI Trust Chain Framework as described in the
+proprietary whitepaper by Mossrake Group, LLC. The framework design, concepts,
+and architecture are proprietary intellectual property of Mossrake Group, LLC.
+
+While this reference implementation is released under AGPL-3.0, the underlying
+framework design remains the intellectual property of Mossrake Group, LLC.
+Use of this software does not grant any rights to the framework design itself
+beyond what is necessary to use, modify, and distribute this implementation
+under the terms of the AGPL-3.0.
+
+Contact Information:
+Mossrake Group, LLC
+https://github.com/mossrake/reasoning
+
+Contributors to this project agree to license their contributions under
+the same AGPL-3.0 license terms.

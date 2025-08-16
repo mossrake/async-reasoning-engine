@@ -1,0 +1,355 @@
+<svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="1200" height="800" fill="#0a0b0f"/>
+  
+  <!-- Title -->
+  <text x="600" y="30" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="20" font-weight="bold">
+    Asynchronous Reasoning Engine: Deep Thought Processing
+  </text>
+  
+  <!-- Incoming Assertions Queue -->
+  <g id="incoming-assertions">
+    <rect x="20" y="60" width="200" height="120" fill="#1a1b23" stroke="#4a9eff" stroke-width="2" rx="8"/>
+    <text x="120" y="80" text-anchor="middle" fill="#4a9eff" font-family="Arial, sans-serif" font-size="14" font-weight="bold">
+      Incoming Assertions
+    </text>
+    
+    <!-- Queue items -->
+    <rect x="30" y="90" width="180" height="18" fill="#2d3748" stroke="#68d391" stroke-width="1" rx="2"/>
+    <text x="35" y="102" fill="#68d391" font-family="monospace" font-size="10">
+      (Q4 sales +30%, 14:23, conf:0.85, sales_sys)
+    </text>
+    
+    <rect x="30" y="112" width="180" height="18" fill="#2d3748" stroke="#f6ad55" stroke-width="1" rx="2"/>
+    <text x="35" y="124" fill="#f6ad55" font-family="monospace" font-size="10">
+      (SMB costs +50%, 14:25, conf:0.90, analytics)
+    </text>
+    
+    <rect x="30" y="134" width="180" height="18" fill="#2d3748" stroke="#fc8181" stroke-width="1" rx="2"/>
+    <text x="35" y="146" fill="#fc8181" font-family="monospace" font-size="10">
+      (Server lag detected, 14:27, conf:0.75, monitor)
+    </text>
+    
+    <rect x="30" y="156" width="180" height="18" fill="#2d3748" stroke="#9f7aea" stroke-width="1" rx="2"/>
+    <text x="35" y="168" fill="#9f7aea" font-family="monospace" font-size="10">
+      (DB optimization +60%, 14:29, conf:0.85, eng)
+    </text>
+  </g>
+  
+  <!-- Context Processing Thread -->
+  <g id="context-thread">
+    <rect x="260" y="60" width="160" height="120" fill="#1a1b23" stroke="#38a169" stroke-width="2" rx="8"/>
+    <text x="340" y="80" text-anchor="middle" fill="#38a169" font-family="Arial, sans-serif" font-size="12" font-weight="bold">
+      Context Processing
+    </text>
+    <text x="340" y="95" text-anchor="middle" fill="#38a169" font-family="Arial, sans-serif" font-size="12" font-weight="bold">
+      Thread (&lt;10ms)
+    </text>
+    
+    <text x="270" y="115" fill="#a0aec0" font-family="Arial, sans-serif" font-size="10">
+      • Validate assertions
+    </text>
+    <text x="270" y="130" fill="#a0aec0" font-family="Arial, sans-serif" font-size="10">
+      • Categorize &amp; tag
+    </text>
+    <text x="270" y="145" fill="#a0aec0" font-family="Arial, sans-serif" font-size="10">
+      • Queue or defer
+    </text>
+    <text x="270" y="160" fill="#a0aec0" font-family="Arial, sans-serif" font-size="10">
+      • Signal context change
+    </text>
+  </g>
+  
+  <!-- Arrow from assertions to context thread -->
+  <path d="M 220 120 L 250 120" stroke="#4a9eff" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  
+  <!-- Deep Thought Trigger -->
+  <g id="deep-thought-trigger">
+    <rect x="450" y="60" width="180" height="80" fill="#2d1b69" stroke="#9f7aea" stroke-width="2" rx="8"/>
+    <text x="540" y="80" text-anchor="middle" fill="#9f7aea" font-family="Arial, sans-serif" font-size="12" font-weight="bold">
+      Deep Thought Triggered
+    </text>
+    <text x="460" y="100" fill="#c6a7f7" font-family="Arial, sans-serif" font-size="10">
+      if context_version &gt; last_reasoned:
+    </text>
+    <text x="460" y="115" fill="#c6a7f7" font-family="Arial, sans-serif" font-size="10">
+      enter_deep_thought_mode()
+    </text>
+    <text x="460" y="130" fill="#c6a7f7" font-family="Arial, sans-serif" font-size="10">
+      queue_new_assertions()
+    </text>
+  </g>
+  
+  <!-- Arrow from context thread to deep thought -->
+  <path d="M 420 100 L 440 100" stroke="#38a169" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  
+  <!-- Assertion Queue (during deep thought) -->
+  <g id="assertion-queue">
+    <rect x="660" y="60" width="140" height="80" fill="#7c2d12" stroke="#f6ad55" stroke-width="2" rx="8"/>
+    <text x="730" y="80" text-anchor="middle" fill="#f6ad55" font-family="Arial, sans-serif" font-size="12" font-weight="bold">
+      Assertion Queue
+    </text>
+    <text x="730" y="95" text-anchor="middle" fill="#f6ad55" font-family="Arial, sans-serif" font-size="10">
+      (Deep Thought Mode)
+    </text>
+    
+    <rect x="670" y="105" width="120" height="12" fill="#fed7aa" stroke="#f6ad55" stroke-width="1" rx="2"/>
+    <rect x="670" y="120" width="120" height="12" fill="#fed7aa" stroke="#f6ad55" stroke-width="1" rx="2"/>
+    <text x="675" y="128" fill="#7c2d12" font-family="Arial, sans-serif" font-size="8">
+      Queued for later...
+    </text>
+  </g>
+  
+  <!-- Arrow from deep thought to queue -->
+  <path d="M 630 100 L 650 100" stroke="#9f7aea" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  
+  <!-- Context Window (Stable Snapshot) -->
+  <g id="context-window">
+    <rect x="60" y="220" width="300" height="200" fill="#1a202c" stroke="#63b3ed" stroke-width="3" rx="8"/>
+    <text x="210" y="240" text-anchor="middle" fill="#63b3ed" font-family="Arial, sans-serif" font-size="14" font-weight="bold">
+      Context Window (Stable Snapshot)
+    </text>
+    
+    <!-- Evidence items -->
+    <text x="70" y="260" fill="#68d391" font-family="Arial, sans-serif" font-size="11" font-weight="bold">EVIDENCE:</text>
+    <rect x="70" y="265" width="280" height="14" fill="#22543d" stroke="#68d391" stroke-width="1" rx="2"/>
+    <text x="75" y="275" fill="#68d391" font-family="monospace" font-size="9">
+      (Q4 sales exceeded targets by 30%, 14:23, conf:0.85, active, sales_system)
+    </text>
+    
+    <rect x="70" y="282" width="280" height="14" fill="#22543d" stroke="#68d391" stroke-width="1" rx="2"/>
+    <text x="75" y="292" fill="#68d391" font-family="monospace" font-size="9">
+      (SMB acquisition costs increased 50%, 14:25, conf:0.90, active, analytics)
+    </text>
+    
+    <!-- Hypotheses -->
+    <text x="70" y="315" fill="#90cdf4" font-family="Arial, sans-serif" font-size="11" font-weight="bold">HYPOTHESES:</text>
+    
+    <!-- Active hypothesis -->
+    <rect x="70" y="320" width="280" height="14" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1" rx="2"/>
+    <circle cx="75" cy="327" r="3" fill="#10b981"/>
+    <text x="85" y="330" fill="#90cdf4" font-family="monospace" font-size="9">
+      Enterprise strategy driving growth (conf:0.75, ACTIVE)
+    </text>
+    
+    <!-- Weakened hypothesis -->
+    <rect x="70" y="337" width="280" height="14" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1" rx="2"/>
+    <circle cx="75" cy="344" r="3" fill="#f59e0b"/>
+    <text x="85" y="347" fill="#90cdf4" font-family="monospace" font-size="9">
+      SMB market remains viable (conf:0.45, WEAKENED)
+    </text>
+    
+    <!-- Dormant hypothesis -->
+    <rect x="70" y="354" width="280" height="14" fill="#1e3a8a" stroke="#3b82f6" stroke-width="1" rx="2"/>
+    <circle cx="75" cy="361" r="3" fill="#ef4444"/>
+    <text x="85" y="364" fill="#90cdf4" font-family="monospace" font-size="9">
+      Infrastructure scaling adequate (conf:0.25, DORMANT)
+    </text>
+    
+    <!-- Context metadata -->
+    <text x="70" y="385" fill="#a0aec0" font-family="Arial, sans-serif" font-size="10">
+      Version: 47 | Tokens: 3,247 | Hash: a7c4d8e2
+    </text>
+    <text x="70" y="400" fill="#a0aec0" font-family="Arial, sans-serif" font-size="10">
+      Last Reasoned: v44 | Cycles: 0/10 | Status: THINKING
+    </text>
+  </g>
+  
+  <!-- Deep Thought Processing Cycles -->
+  <g id="reasoning-cycles">
+    <rect x="420" y="220" width="350" height="200" fill="#2d1b69" stroke="#a78bfa" stroke-width="3" rx="8"/>
+    <text x="595" y="240" text-anchor="middle" fill="#a78bfa" font-family="Arial, sans-serif" font-size="14" font-weight="bold">
+      Deep Thought Reasoning Cycles
+    </text>
+    
+    <!-- Cycle 1 -->
+    <g id="cycle1">
+      <rect x="430" y="250" width="100" height="40" fill="#4c1d95" stroke="#8b5cf6" stroke-width="1" rx="4"/>
+      <text x="480" y="265" text-anchor="middle" fill="#c4b5fd" font-family="Arial, sans-serif" font-size="10" font-weight="bold">
+        Cycle 1
+      </text>
+      <text x="435" y="278" fill="#c4b5fd" font-family="Arial, sans-serif" font-size="8">
+        Generate hypotheses
+      </text>
+      <text x="435" y="287" fill="#c4b5fd" font-family="Arial, sans-serif" font-size="8">
+        from evidence
+      </text>
+    </g>
+    
+    <!-- Cycle 2 -->
+    <g id="cycle2">
+      <rect x="540" y="250" width="100" height="40" fill="#4c1d95" stroke="#8b5cf6" stroke-width="1" rx="4"/>
+      <text x="590" y="265" text-anchor="middle" fill="#c4b5fd" font-family="Arial, sans-serif" font-size="10" font-weight="bold">
+        Cycle 2
+      </text>
+      <text x="545" y="278" fill="#c4b5fd" font-family="Arial, sans-serif" font-size="8">
+        Adjust confidence
+      </text>
+      <text x="545" y="287" fill="#c4b5fd" font-family="Arial, sans-serif" font-size="8">
+        Enterprise: +0.15
+      </text>
+    </g>
+    
+    <!-- Cycle 3 -->
+    <g id="cycle3">
+      <rect x="650" y="250" width="100" height="40" fill="#4c1d95" stroke="#8b5cf6" stroke-width="1" rx="4"/>
+      <text x="700" y="265" text-anchor="middle" fill="#c4b5fd" font-family="Arial, sans-serif" font-size="10" font-weight="bold">
+        Cycle 3
+      </text>
+      <text x="655" y="278" fill="#c4b5fd" font-family="Arial, sans-serif" font-size="8">
+        Status change
+      </text>
+      <text x="655" y="287" fill="#c4b5fd" font-family="Arial, sans-serif" font-size="8">
+        SMB: WEAKENED
+      </text>
+    </g>
+    
+    <!-- Anti-oscillation logic -->
+    <rect x="430" y="300" width="320" height="60" fill="#7c2d12" stroke="#f97316" stroke-width="2" rx="6"/>
+    <text x="590" y="320" text-anchor="middle" fill="#fed7aa" font-family="Arial, sans-serif" font-size="12" font-weight="bold">
+      Oscillation Detection &amp; Prevention
+    </text>
+    <text x="440" y="335" fill="#fed7aa" font-family="Arial, sans-serif" font-size="10">
+      • Hash-based cycle detection: a7c4d8e2 → b8f5e9c3 → a7c4d8e2
+    </text>
+    <text x="440" y="348" fill="#fed7aa" font-family="Arial, sans-serif" font-size="10">
+      • Terminate on 2-state/3-state patterns or 3 sterile cycles
+    </text>
+    
+    <!-- Context rewriting -->
+    <rect x="430" y="370" width="320" height="40" fill="#065f46" stroke="#10b981" stroke-width="2" rx="6"/>
+    <text x="590" y="385" text-anchor="middle" fill="#6ee7b7" font-family="Arial, sans-serif" font-size="11" font-weight="bold">
+      Context Rewriting
+    </text>
+    <text x="440" y="400" fill="#6ee7b7" font-family="Arial, sans-serif" font-size="10">
+      Confidence evolution, status updates, new hypotheses added
+    </text>
+  </g>
+  
+  <!-- Updated Context Window -->
+  <g id="updated-context">
+    <rect x="840" y="220" width="320" height="200" fill="#1a202c" stroke="#38d9a9" stroke-width="3" rx="8"/>
+    <text x="1000" y="240" text-anchor="middle" fill="#38d9a9" font-family="Arial, sans-serif" font-size="14" font-weight="bold">
+      Updated Context (Post Deep Thought)
+    </text>
+    
+    <!-- Evidence (unchanged) -->
+    <text x="850" y="260" fill="#68d391" font-family="Arial, sans-serif" font-size="11" font-weight="bold">EVIDENCE (unchanged):</text>
+    <rect x="850" y="265" width="300" height="12" fill="#22543d" stroke="#68d391" stroke-width="1" rx="2"/>
+    <text x="855" y="274" fill="#68d391" font-family="monospace" font-size="8">
+      (Q4 sales exceeded targets by 30%, 14:23, conf:0.85, active...)
+    </text>
+    
+    <!-- Updated hypotheses -->
+    <text x="850" y="295" fill="#38d9a9" font-family="Arial, sans-serif" font-size="11" font-weight="bold">HYPOTHESES (evolved):</text>
+    
+    <!-- Enhanced active hypothesis -->
+    <rect x="850" y="300" width="300" height="14" fill="#1e3a8a" stroke="#10b981" stroke-width="2" rx="2"/>
+    <circle cx="855" cy="307" r="3" fill="#10b981"/>
+    <text x="865" y="310" fill="#6ee7b7" font-family="monospace" font-size="9">
+      Enterprise strategy driving growth (conf:0.90, ACTIVE) ↗
+    </text>
+    
+    <!-- Still weakened -->
+    <rect x="850" y="317" width="300" height="14" fill="#1e3a8a" stroke="#f59e0b" stroke-width="1" rx="2"/>
+    <circle cx="855" cy="324" r="3" fill="#f59e0b"/>
+    <text x="865" y="327" fill="#fbbf24" font-family="monospace" font-size="9">
+      SMB market remains viable (conf:0.35, WEAKENED) ↘
+    </text>
+    
+    <!-- Revived hypothesis -->
+    <rect x="850" y="334" width="300" height="14" fill="#1e3a8a" stroke="#10b981" stroke-width="2" rx="2"/>
+    <circle cx="855" cy="341" r="3" fill="#10b981"/>
+    <text x="865" y="344" fill="#6ee7b7" font-family="monospace" font-size="9">
+      Infrastructure scaling adequate (conf:0.60, ACTIVE) ↗ REVIVED
+    </text>
+    
+    <!-- New hypothesis -->
+    <rect x="850" y="351" width="300" height="14" fill="#1e3a8a" stroke="#8b5cf6" stroke-width="2" rx="2"/>
+    <circle cx="855" cy="358" r="3" fill="#8b5cf6"/>
+    <text x="865" y="361" fill="#c4b5fd" font-family="monospace" font-size="9">
+      Performance optimization priority (conf:0.70, ACTIVE) ✨ NEW
+    </text>
+    
+    <!-- Updated metadata -->
+    <text x="850" y="385" fill="#38d9a9" font-family="Arial, sans-serif" font-size="10">
+      Version: 50 | Tokens: 3,891 | Hash: c9f6b2a5
+    </text>
+    <text x="850" y="400" fill="#38d9a9" font-family="Arial, sans-serif" font-size="10">
+      Last Reasoned: v50 | Cycles: 3/10 | Status: STABLE
+    </text>
+  </g>
+  
+  <!-- Reasoning flow arrows -->
+  <path d="M 370 320 L 410 320" stroke="#63b3ed" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M 780 320 L 830 320" stroke="#a78bfa" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+  
+  <!-- Exit deep thought -->
+  <g id="exit-deep-thought">
+    <rect x="420" y="460" width="350" height="80" fill="#065f46" stroke="#10b981" stroke-width="2" rx="8"/>
+    <text x="595" y="480" text-anchor="middle" fill="#6ee7b7" font-family="Arial, sans-serif" font-size="14" font-weight="bold">
+      Exit Deep Thought Mode
+    </text>
+    <text x="430" y="500" fill="#6ee7b7" font-family="Arial, sans-serif" font-size="12">
+      ✓ Reasoning stable (hash unchanged for 3 cycles)
+    </text>
+    <text x="430" y="515" fill="#6ee7b7" font-family="Arial, sans-serif" font-size="12">
+      ✓ Process queued assertions from deep thought session
+    </text>
+    <text x="430" y="530" fill="#6ee7b7" font-family="Arial, sans-serif" font-size="12">
+      ✓ Return to normal assertion processing mode
+    </text>
+  </g>
+  
+  <!-- Return to main loop -->
+  <g id="return-loop">
+    <rect x="60" y="560" width="720" height="60" fill="#1a1b23" stroke="#4a9eff" stroke-width="2" rx="8"/>
+    <text x="420" y="580" text-anchor="middle" fill="#4a9eff" font-family="Arial, sans-serif" font-size="14" font-weight="bold">
+      Return to Main Processing Loop
+    </text>
+    <text x="70" y="600" fill="#a0aec0" font-family="Arial, sans-serif" font-size="12">
+      Ready to accept new assertions • Context updated with evolved hypotheses • Confidence levels adjusted • New theories generated
+    </text>
+  </g>
+  
+  <!-- Final arrows -->
+  <path d="M 595 540 L 595 550" stroke="#10b981" stroke-width="3" fill="none" marker-end="url(#arrowhead)"/>
+  
+  <!-- Status indicators -->
+  <g id="status-legend">
+    <rect x="840" y="460" width="320" height="80" fill="#1a1b23" stroke="#a0aec0" stroke-width="1" rx="8"/>
+    <text x="1000" y="480" text-anchor="middle" fill="#a0aec0" font-family="Arial, sans-serif" font-size="12" font-weight="bold">
+      Hypothesis Status Legend
+    </text>
+    
+    <circle cx="850" cy="495" r="4" fill="#10b981"/>
+    <text x="860" y="499" fill="#10b981" font-family="Arial, sans-serif" font-size="11">ACTIVE (conf > 0.5)</text>
+    
+    <circle cx="850" cy="510" r="4" fill="#f59e0b"/>
+    <text x="860" y="514" fill="#f59e0b" font-family="Arial, sans-serif" font-size="11">WEAKENED (0.3 < conf ≤ 0.5)</text>
+    
+    <circle cx="850" cy="525" r="4" fill="#ef4444"/>
+    <text x="860" y="529" fill="#ef4444" font-family="Arial, sans-serif" font-size="11">DORMANT (conf ≤ 0.3)</text>
+  </g>
+  
+  <!-- Performance stats -->
+  <g id="performance">
+    <rect x="840" y="560" width="320" height="60" fill="#1a1b23" stroke="#9f7aea" stroke-width="1" rx="8"/>
+    <text x="1000" y="580" text-anchor="middle" fill="#9f7aea" font-family="Arial, sans-serif" font-size="12" font-weight="bold">
+      Performance Characteristics
+    </text>
+    <text x="850" y="595" fill="#c6a7f7" font-family="Arial, sans-serif" font-size="10">
+      Assertion ingestion: &lt;10ms • Deep thought: 10-60s • Reasoning cycle: 1-5s
+    </text>
+    <text x="850" y="610" fill="#c6a7f7" font-family="Arial, sans-serif" font-size="10">
+      Context tokens: 3,891/4,000 • Oscillation detection: 6-cycle window
+    </text>
+  </g>
+  
+  <!-- Arrow marker definition -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#4a9eff"/>
+    </marker>
+  </defs>
+</svg>

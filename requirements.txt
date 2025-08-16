@@ -1,0 +1,24 @@
+# Core reasoning engine dependencies
+dspy-ai>=2.4.0
+openai[azure]>=1.12.0
+
+# Web service framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.5.0
+python-multipart>=0.0.6
+
+# Additional utilities and stability
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Optional: Enhanced logging and monitoring
+structlog>=23.2.0
+
+# Optional: Testing dependencies (uncomment if needed)
+# pytest>=7.4.0
+# httpx>=0.25.0  # For testing FastAPI endpoints
+
+# Optional: Production deployment (uncomment if needed)
+# gunicorn>=21.2.0  # Alternative to uvicorn for production
+# prometheus-client>=0.19.0  # For metrics collection
