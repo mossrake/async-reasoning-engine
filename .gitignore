@@ -7,8 +7,12 @@ __pycache__/
 *.so
 
 # misc
-# this code is for allowing the use of DSPy instructions when the AI endpoint doesn't support it
-DSPy-instructions.py
+DSPy*.py
+
+# images
+*.jpg
+*.jpeg
+
 # this is the venv
 reasoning/
 
