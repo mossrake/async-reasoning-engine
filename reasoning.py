@@ -27,6 +27,7 @@ This code implements a sophisticated reasoning system with:
 - Self-modifying context
 - Oscillation detection
 - Anti-rumination logic
+- LLM-based hypothesis matching for detailed content
 
 Architecture:
 - Fast assertion queue that only updates context
@@ -49,6 +50,8 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 import dspy
+import csv
+
 
 # Core data structures
 class ItemType(Enum):
@@ -102,11 +105,153 @@ class ContextOperation:
     operation_id: str = field(default_factory=lambda: str(datetime.now().timestamp()))
     result_queue: Optional[queue.Queue] = None
 
+class DomainConfig:
+    def __init__(self, domain_type: str = "business"):
+        if domain_type == "business":
+            self.keywords = {
+                'sales': ['sales', 'revenue', 'deals'],
+                'technical': ['server', 'performance', 'system'],
+                'market': ['market', 'competitor'],
+                'enterprise': ['enterprise', 'b2b'],
+                'smb': ['smb', 'small', 'medium']
+            }
+            self.context_description = "Business decision support context with focus on strategy, operations, and market analysis"
+            self.hypothesis_keywords = ['enterprise', 'smb', 'customer', 'revenue', 'performance', 'market', 'sales']
+
+            self.hypothesis_instructions = """
+Generate 3-5 detailed BUSINESS hypotheses from evidence. Focus on:
+- Market conditions and competitive dynamics
+- Operational efficiency and performance issues  
+- Strategic business decisions and outcomes
+- Revenue, costs, and profitability factors
+
+Each hypothesis should:
+- Provide a comprehensive explanation of business patterns
+- Include specific details about mechanisms and relationships
+- Connect multiple pieces of evidence into a coherent narrative
+- Explain strategic implications with supporting rationale
+- Be substantive enough to guide meaningful decision-making
+
+Elaborate as needed to fully develop each hypothesis - detailed analysis is preferred over brevity.
+"""
+            self.executive_role = "CEO/senior leadership team"
+            self.output_format = "executive briefing"
+            
+        elif domain_type == "criminal_investigation":
+            self.keywords = {
+                'evidence': ['forensic', 'dna', 'fingerprint', 'witness', 'crime_scene', 'blood', 'weapon'],
+                'temporal': ['timeline', 'alibi', 'when', 'time', 'midnight', 'evening', 'morning'],
+                'relationship': ['suspect', 'victim', 'family', 'friend', 'spouse', 'partner', 'business'],
+                'location': ['scene', 'location', 'address', 'where', 'apartment', 'building', 'room'],
+                'motive': ['motive', 'reason', 'why', 'conflict', 'inheritance', 'money', 'revenge', 'jealousy'],
+                'method': ['entry', 'locked', 'forced', 'window', 'door', 'weapon', 'strangled', 'shot']
+            }
+            self.context_description = "Criminal investigation context focusing on evidence analysis, suspect identification, and case resolution"
+            self.hypothesis_keywords = ['suspect', 'victim', 'evidence', 'motive', 'witness', 'crime', 'forensic']
+        
+            self.hypothesis_instructions = """
+You are analyzing a CRIMINAL CASE. Generate 3-5 SPECIFIC detailed hypotheses naming WHO did it and WHY.
+
+IT IS VERY IMPORTANT to Use ONLY the real names and people mentioned in the evidence. Do NOT invent fictional characters.
+Build a roster of potential suspects.
+
+EVIDENCE ANALYSIS:
+- Read the evidence carefully for actual names, relationships, and motives
+- If evidence says "business partner John Smith" - use "John Smith", not "the business partner"
+- If evidence mentions specific usernames or identities - use those exact identities
+- If evidence lists family members by name - use their real names
+- Connect specific people to specific motives from the evidence
+
+DETECTIVE PRINCIPLES:
+- Always suspect the closest person first (family, partners, business associates)
+- Follow the money (who benefits financially?)
+- Use DNA, forensics, and timeline to eliminate/confirm suspects
+- Name the specific person and their specific motive
+
+Each hypothesis should:
+- Provide detailed explanation of who committed the crime and why
+- Include comprehensive analysis of evidence supporting this theory
+- Explain the timeline and method used
+- Address potential counterarguments or alternative explanations
+- Connect multiple pieces of evidence into a coherent case narrative
+
+Generate hypotheses that connect real people from evidence to real motives:
+- "[Real name from evidence] killed the victim because [specific detailed motive from evidence]"
+- "The DNA evidence points to [specific person mentioned] who had [specific opportunity and detailed reasoning]"
+
+Focus on WHO did it using actual evidence, with detailed supporting analysis.
+"""
+            self.executive_role = "detective/investigation team"      
+            self.output_format = "case summary"
+
+        else:
+            # Default/fallback domain
+            self.keywords = {
+                'analysis': ['analysis', 'assessment', 'evaluation'],
+                'evidence': ['evidence', 'data', 'information'],
+                'conclusion': ['conclusion', 'result', 'finding'],
+                'pattern': ['pattern', 'trend', 'correlation']
+            }
+            self.context_description = "General analysis context for evidence evaluation and hypothesis generation"
+            self.hypothesis_keywords = ['analysis', 'evidence', 'conclusion', 'assessment', 'evaluation', 'pattern']
+            
+            self.hypothesis_instructions = """
+Generate 3-5 detailed hypotheses from the available evidence. Focus on:
+- Patterns and correlations in the data
+- Cause and effect relationships
+- Potential explanations for observed phenomena
+- Alternative interpretations of the evidence
+
+Each hypothesis should:
+- Provide comprehensive explanation of what you believe is happening
+- Include detailed reasoning connecting evidence to conclusions
+- Explain underlying mechanisms that would produce observed patterns
+- Be substantive enough to guide further analysis and decision-making
+
+Elaborate as needed to fully develop each hypothesis - thorough analysis is preferred over brevity.
+"""
+            self.executive_role = "analyst/decision maker"
+            self.output_format = "analytical report"
+
+class LLMMatchingCache:
+    def __init__(self, max_size=100):
+        self.cache = {}
+        self.max_size = max_size
+    
+    def get_cache_key(self, text_a: str, text_b: str) -> str:
+        """Create deterministic cache key"""
+        import hashlib
+        combined = f"{text_a.lower()}|||{text_b.lower()}"
+        return hashlib.md5(combined.encode()).hexdigest()[:16]
+    
+    def get(self, text_a: str, text_b: str) -> Optional[bool]:
+        key = self.get_cache_key(text_a, text_b)
+        # Check both orders since matching should be symmetric
+        reverse_key = self.get_cache_key(text_b, text_a)
+        
+        if key in self.cache:
+            return self.cache[key]
+        elif reverse_key in self.cache:
+            return self.cache[reverse_key]
+        
+        return None
+    
+    def set(self, text_a: str, text_b: str, result: bool):
+        if len(self.cache) >= self.max_size:
+            # Remove oldest entry
+            oldest_key = next(iter(self.cache))
+            del self.cache[oldest_key]
+        
+        key = self.get_cache_key(text_a, text_b)
+        self.cache[key] = result
+
 class LLMContextManager(dspy.Module):
     """Real LLM modules for reasoning with proper DSPy usage - Azure OpenAI compatible"""
     
-    def __init__(self):
+    def __init__(self, domain_config: DomainConfig):
         super().__init__()
+        self.domain_config = domain_config
+        self.matching_cache = LLMMatchingCache()
         
         # Azure OpenAI compatible DSPy signatures (no instructions parameter)
         self.reason_about_context = dspy.ChainOfThought(
@@ -125,56 +270,16 @@ class LLMContextManager(dspy.Module):
             "evidence_items, business_context -> hypothesis_suggestions"
         )
 
-
-        def generate_initial_hypotheses(self, evidence_items: str) -> str:
-            hypothesis_prompt = f"""
-        {self.domain_config.hypothesis_instructions}
+    def check_hypothesis_equivalence(self, hypothesis_a: str, hypothesis_b: str) -> bool:
+        """Use LLM to determine if two hypotheses are substantially the same"""
         
-        Format each as: "HYPOTHESIS: [clear statement] | CONFIDENCE: [0.X] | REASONING: [why this makes sense]"
+        # Check cache first
+        cached_result = self.matching_cache.get(hypothesis_a, hypothesis_b)
+        if cached_result is not None:
+            return cached_result
         
-        EVIDENCE ITEMS:
-        {evidence_items}
-        
-        CONTEXT: {self.domain_config.context_description}
-        """
-            
-            hypotheses = self.generate_hypotheses(
-                evidence_items=hypothesis_prompt,
-                business_context=self.domain_config.context_description
-            )
-            return hypotheses.hypothesis_suggestions
-        
-    
-    
-####        def generate_initial_hypotheses(self, evidence_items: str) -> str:
-####            """LLM generates initial hypotheses from evidence"""
-####            
-####            hypothesis_prompt = f"""
-####        Generate 3-5 business hypotheses from evidence. Each hypothesis should:
-####        1. Be testable against future evidence
-####        2. Explain the observed evidence patterns
-####        3. Include initial confidence (0.1 to 0.9)
-####        4. Focus on business strategy, market conditions, operational efficiency
-####        
-####        Format each as: "HYPOTHESIS: [clear statement] | CONFIDENCE: [0.X] | REASONING: [why this makes sense]"
-####        
-####        EVIDENCE ITEMS:
-####        {evidence_items}
-####        
-####        BUSINESS CONTEXT: Business decision support context with focus on strategy, operations, and market analysis
-####        """
-####            
-####            hypotheses = self.generate_hypotheses(
-####                evidence_items=hypothesis_prompt,
-####                business_context="Business decision support context"
-####            )
-####            return hypotheses.hypothesis_suggestions
-####
-
-    def reason_about_context_changes(self, context_summary: str, new_items: str) -> str:
-        """Direct Azure OpenAI call for guaranteed JSON mode with better prompting"""
+        # Direct Azure OpenAI call for guaranteed JSON response
         import requests
-        import os
         
         url = f"{os.getenv('AZURE_OPENAI_ENDPOINT')}/openai/deployments/{os.getenv('AZURE_OPENAI_DEPLOYMENT')}/chat/completions?api-version={os.getenv('AZURE_OPENAI_VERSION')}"
         
@@ -183,41 +288,160 @@ class LLMContextManager(dspy.Module):
             "Content-Type": "application/json"
         }
         
+        prompt = f"""You are comparing two {self.domain_config.context_description.lower()} hypotheses to determine if they represent substantially the same theory or conclusion.
+
+HYPOTHESIS A: {hypothesis_a}
+
+HYPOTHESIS B: {hypothesis_b}
+
+INSTRUCTIONS:
+Determine if these hypotheses are substantially equivalent by considering:
+
+1. CORE THESIS: Do they make the same fundamental claim about what is happening?
+2. CAUSAL RELATIONSHIPS: Do they identify the same cause-and-effect patterns?
+3. IMPLICATIONS: Do they suggest similar conclusions or outcomes?
+4. SCOPE: Are they addressing the same area/problem?
+
+IGNORE differences in:
+- Level of detail (one might be more elaborate)
+- Specific wording or phrasing
+- Order of information presented
+- Minor variations in supporting evidence cited
+
+EXAMPLES OF EQUIVALENCE:
+- "Sales exceeded targets" vs "Q4 sales performance surpassed quarterly goals by 30%"
+- "CRM improved efficiency" vs "New customer relationship management system streamlined sales pipeline"
+- "Market competition increased" vs "Competitive pressure intensified due to new entrants"
+
+EXAMPLES OF NON-EQUIVALENCE:
+- "Sales exceeded targets" vs "Marketing campaign failed"
+- "CRM improved efficiency" vs "Customer satisfaction declined"
+- "Enterprise segment grew" vs "SMB segment grew"
+
+Respond with JSON in this exact format:
+{{
+  "equivalent": true/false,
+  "confidence": 0.X,
+  "reasoning": "brief explanation of why they are/aren't equivalent"
+}}"""
+
+        data = {
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.1,  # Low temperature for consistent matching decisions
+            "max_tokens": 500
+        }
+        
+        try:
+            response = requests.post(url, headers=headers, json=data)
+            result = response.json()["choices"][0]["message"]["content"]
+            
+            decision = json.loads(result)
+            
+            # Return True if equivalent with reasonable confidence
+            is_equivalent = decision.get("equivalent", False) and decision.get("confidence", 0) > 0.7
+            
+            # Cache the result
+            self.matching_cache.set(hypothesis_a, hypothesis_b, is_equivalent)
+            
+            return is_equivalent
+            
+        except Exception as e:
+            print(f"   LLM matching failed: {e}, falling back to string matching")
+            # Fallback to existing string matching if LLM fails
+            result = self._fallback_string_match(hypothesis_a, hypothesis_b)
+            self.matching_cache.set(hypothesis_a, hypothesis_b, result)
+            return result
+
+    def _fallback_string_match(self, existing_content: str, llm_content: str) -> bool:
+        """Fallback string matching if LLM matching fails"""
+        existing_lower = existing_content.lower()
+        llm_lower = llm_content.lower()
+        
+        # Simple substring check
+        if llm_lower in existing_lower or existing_lower in llm_lower:
+            return True
+        
+        # Basic word overlap
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'that', 'this'}
+        existing_words = set(existing_lower.split()) - stop_words
+        llm_words = set(llm_lower.split()) - stop_words
+        
+        if len(existing_words) == 0 or len(llm_words) == 0:
+            return False
+        
+        intersection = existing_words.intersection(llm_words)
+        similarity = len(intersection) / max(len(existing_words), len(llm_words))
+        
+        return similarity > 0.4
+
+    def generate_initial_hypotheses(self, evidence_items: str) -> str:
+        """LLM generates initial hypotheses from evidence using domain config"""
+        
+        hypothesis_prompt = f"""
+{self.domain_config.hypothesis_instructions}
+
+Format each as: "HYPOTHESIS: [detailed explanation of what you believe is happening, including mechanisms, relationships, and implications] | CONFIDENCE: [0.X] | REASONING: [comprehensive justification connecting evidence to conclusion]"
+
+Provide thorough, substantive content in each field. The hypothesis field should contain a complete explanation, not just a brief statement.
+
+EVIDENCE ITEMS:
+{evidence_items}
+
+CONTEXT: {self.domain_config.context_description}
+"""
+        
+        hypotheses = self.generate_hypotheses(
+            evidence_items=hypothesis_prompt,
+            business_context=self.domain_config.context_description
+        )
+        return hypotheses.hypothesis_suggestions
+
+    def reason_about_context_changes(self, context_summary: str, new_items: str) -> str:
+        """Direct Azure OpenAI call for guaranteed JSON mode with better prompting"""
+        import requests
+        
+        url = f"{os.getenv('AZURE_OPENAI_ENDPOINT')}/openai/deployments/{os.getenv('AZURE_OPENAI_DEPLOYMENT')}/chat/completions?api-version={os.getenv('AZURE_OPENAI_VERSION')}"
+        
+        headers = {
+            "api-key": os.getenv("AZURE_OPENAI_KEY"),
+            "Content-Type": "application/json"
+        }
+
+        ####prompt = f"""You are analyzing {self.domain_config.context_description.lower()} hypotheses based on new evidence. Your job is to UPDATE existing hypotheses FIRST, then create new ones only if truly needed. Focus on updating confidence scores based on how the new evidence supports or contradicts each hypothesis.
+
         # IMPROVED PROMPT: Explicit instruction to update confidence based on evidence
-        prompt = f"""You are analyzing business hypotheses based on new evidence. Your job is to UPDATE confidence scores based on how the new evidence supports or contradicts each hypothesis.
+        prompt = f"""You are analyzing {self.domain_config.context_description.lower()} hypotheses based on new evidence. Your job is to UPDATE confidence scores based on how the new evidence supports or contradicts each hypothesis.
     
-    CURRENT HYPOTHESES WITH CONFIDENCE SCORES:
-    {context_summary}
-    
-    NEW EVIDENCE TO ANALYZE:
-    {new_items}
-    
-    INSTRUCTIONS:
-    1. For each hypothesis, determine if the new evidence SUPPORTS, CONTRADICTS, or is NEUTRAL
-    2. INCREASE confidence (by 0.1-0.3) for hypotheses supported by evidence
-    3. DECREASE confidence (by 0.1-0.3) for hypotheses contradicted by evidence  
-    4. Keep confidence unchanged only if evidence is truly neutral
-    5. Consider these specific evidence impacts:
-       - "Database optimization improved query performance by 60%" → SUPPORTS operational efficiency hypotheses
-       - "Critical infrastructure failure detected" → CONTRADICTS operational efficiency hypotheses
-       - "Enterprise customers reporting satisfaction improvements" → SUPPORTS customer-focused hypotheses
-       - "SMB customer acquisition costs increased 50%" → CONTRADICTS cost efficiency hypotheses
-       - "New competitor entered SMB market" → SUPPORTS market volatility/competition hypotheses
-    
-    RESPOND WITH JSON in this EXACT format:
+CURRENT HYPOTHESES WITH CONFIDENCE SCORES:
+{context_summary}
+
+NEW EVIDENCE TO ANALYZE:
+{new_items}
+
+INSTRUCTIONS:
+1. For each hypothesis, determine if the new evidence SUPPORTS, CONTRADICTS, or is NEUTRAL
+2. INCREASE confidence (by 0.1-0.3) for hypotheses supported by evidence
+3. DECREASE confidence (by 0.1-0.3) for hypotheses contradicted by evidence  
+4. Keep confidence unchanged only if evidence is truly neutral
+5. Provide detailed reasoning for confidence changes
+
+RESPOND WITH JSON in this EXACT format:
+{{
+  "hypotheses": [
     {{
-      "hypotheses": [
-        {{
-          "statement": "exact hypothesis text",
-          "confidence": updated_confidence_score,
-          "status": "active",
-          "reasoning": "why confidence changed based on evidence"
-        }}
-      ],
-      "new_hypotheses": []
+      "statement": "exact hypothesis text",
+      "confidence": updated_confidence_score,
+      "status": "active",
+      "reasoning": "detailed explanation of why confidence changed based on evidence"
     }}
-    
-    IMPORTANT: Confidence scores MUST be different from input if evidence is relevant. Do not just echo the same confidence values."""
+  ],
+  "new_hypotheses": []
+}}
+
+IMPORTANT: Confidence scores MUST be different from input if evidence is relevant. Do not just echo the same confidence values."""
     
         data = {
             "messages": [
@@ -230,64 +454,6 @@ class LLMContextManager(dspy.Module):
         
         response = requests.post(url, headers=headers, json=data)
         return response.json()["choices"][0]["message"]["content"]
-
-####    def reason_about_context_changes(self, context_summary: str, new_items: str) -> str:
-####        """Direct Azure OpenAI call for guaranteed JSON mode"""
-####        import requests
-####        import os
-####        
-####        url = f"{os.getenv('AZURE_OPENAI_ENDPOINT')}/openai/deployments/{os.getenv('AZURE_OPENAI_DEPLOYMENT')}/chat/completions?api-version={os.getenv('AZURE_OPENAI_VERSION')}"
-####        
-####        headers = {
-####            "api-key": os.getenv("AZURE_OPENAI_KEY"),
-####            "Content-Type": "application/json"
-####        }
-####        
-####        data = {
-####            "messages": [
-####                {"role": "user", "content": f"""Analyze context and respond with JSON:
-####    
-####    {context_summary}
-####    
-####    New items: {new_items}
-####    
-####    Respond with JSON: {{"hypotheses": [], "new_hypotheses": []}}"""}
-####            ],
-####            "response_format": {"type": "json_object"},
-####            "temperature": 0.3,
-####            "max_tokens": 2000
-####        }
-####        
-####        response = requests.post(url, headers=headers, json=data)
-####        return response.json()["choices"][0]["message"]["content"]        
-
-
-
-    def generate_initial_hypotheses(self, evidence_items: str) -> str:
-        """LLM generates initial hypotheses from evidence"""
-        
-        # Include instructions in the input data for Azure OpenAI compatibility
-        hypothesis_prompt = f"""
-Generate 3-5 business hypotheses from evidence. Each hypothesis should:
-1. Be testable against future evidence
-2. Explain the observed evidence patterns
-3. Include initial confidence (0.1 to 0.9)
-4. Focus on business strategy, market conditions, operational efficiency
-5. Be contradictory/alternative to other hypotheses
-
-Format each as: "HYPOTHESIS: [clear statement] | CONFIDENCE: [0.X] | REASONING: [why this makes sense]"
-
-EVIDENCE ITEMS:
-{evidence_items}
-
-BUSINESS CONTEXT: Business decision support context with focus on strategy, operations, and market analysis
-"""
-        
-        hypotheses = self.generate_hypotheses(
-            evidence_items=hypothesis_prompt,
-            business_context="Business decision support context"
-        )
-        return hypotheses.hypothesis_suggestions
 
 def setup_dspy():
     """Setup DSPy with Azure OpenAI"""
@@ -312,34 +478,6 @@ def setup_dspy():
     except Exception as e:
         raise RuntimeError(f"Failed to setup DSPy: {e}")
 
-class DomainConfig:
-    def __init__(self, domain_type: str = "business"):
-        if domain_type == "business":
-            self.keywords = {
-                'sales': ['sales', 'revenue', 'deals'],
-                'technical': ['server', 'performance', 'system'],
-                'market': ['market', 'competitor'],
-                'enterprise': ['enterprise', 'b2b'],
-                'smb': ['smb', 'small', 'medium']
-            }
-            self.context_description = "Business decision support context with focus on strategy, operations, and market analysis"
-            self.hypothesis_instructions = "Generate 3-5 business hypotheses from evidence. Focus on business strategy, market conditions, operational efficiency"
-            self.executive_role = "CEO/senior leadership team"
-            self.output_format = "executive briefing"
-            
-        elif domain_type == "criminal_investigation":
-            self.keywords = {
-                'evidence': ['forensic', 'dna', 'fingerprint', 'witness'],
-                'temporal': ['timeline', 'alibi', 'when', 'time'],
-                'relationship': ['suspect', 'victim', 'family', 'friend'],
-                'location': ['scene', 'location', 'address', 'where'],
-                'motive': ['motive', 'reason', 'why', 'conflict']
-            }
-            self.context_description = "Criminal investigation context focusing on evidence analysis, suspect identification, and case resolution"
-            self.hypothesis_instructions = "Generate 3-5 investigative hypotheses from evidence. Focus on motive, opportunity, means, and suspect identification"
-            self.executive_role = "detective/investigation team"
-            self.output_format = "case summary"
-
 class AsyncReasoningEngine:
     """
     Asynchronous reasoning engine with separate context monitoring
@@ -348,17 +486,19 @@ class AsyncReasoningEngine:
     - Reasoning happens between assertion batches
     - Proper DSPy usage with clean data separation
     - Simple loop counter failsafe to prevent infinite reasoning
+    - LLM-based hypothesis matching for detailed content
     """
     
-
     def __init__(self, max_context_tokens: int = 4000, domain: str = "business"):
-
         # set investigation domain
         self.domain_config = DomainConfig(domain)
         
         # Setup LLM
         setup_dspy()
         
+        # pass domain config
+        self.llm_manager = LLMContextManager(self.domain_config)  
+
         # Core state
         self.context_items: List[ContextItem] = []
         self.max_context_tokens = max_context_tokens
@@ -413,108 +553,14 @@ class AsyncReasoningEngine:
             'context_changes': 0
         }
         
-        # LLM components
-        self.llm_manager = LLMContextManager()
-        
-    def _extract_key_phrases(self, content: str) -> set:
-        """Extract key phrases from hypothesis content for better matching"""
-        content_lower = content.lower()
-        
-        # Define important business phrases that indicate hypothesis topics
-        key_phrases = set()
-        
-        business_phrases = [
-            'marketing campaign', 'sales increase', 'seasonal demand', 'operational efficiency',
-            'customer acquisition', 'market share', 'competitor', 'infrastructure',
-            'performance improvement', 'customer satisfaction', 'q4 sales', 'enterprise',
-            'smb', 'revenue', 'target', 'growth strategy', 'promotion', 'discount'
-        ]
-        
-        for phrase in business_phrases:
-            if phrase in content_lower:
-                key_phrases.add(phrase)
-        
-        # Also extract significant word pairs
-        words = content_lower.split()
-        for i in range(len(words) - 1):
-            pair = f"{words[i]} {words[i+1]}"
-            # Include pairs that contain important business terms
-            if any(term in pair for term in ['sales', 'marketing', 'customer', 'operational', 'performance', 'revenue']):
-                key_phrases.add(pair)
-        
-        return key_phrases
-
     def _hypothesis_matches(self, existing_content: str, llm_content: str) -> bool:
-        """Check if LLM hypothesis content matches an existing hypothesis with multiple strategies"""
-        
+        """Check if LLM hypothesis content matches an existing hypothesis using LLM semantic matching"""
+
         if not existing_content or not llm_content:
             return False
         
-        existing_lower = existing_content.lower()
-        llm_lower = llm_content.lower()
-        
-        #print(f"   DEBUG MATCH: Comparing:")
-        #print(f"   DEBUG MATCH:   Existing: {existing_lower[:60]}...")
-        #print(f"   DEBUG MATCH:   LLM:      {llm_lower[:60]}...")
-        
-        # 1. Exact substring match (either direction)
-        if llm_lower in existing_lower or existing_lower in llm_lower:
-            #print(f"   DEBUG MATCH: SUBSTRING MATCH FOUND")
-            return True
-        
-        # 2. Key phrase matching
-        existing_key_phrases = self._extract_key_phrases(existing_content)
-        llm_key_phrases = self._extract_key_phrases(llm_content)
-        
-        phrase_overlap = existing_key_phrases.intersection(llm_key_phrases)
-        #print(f"   DEBUG MATCH: Key phrase overlap: {phrase_overlap}")
-        
-        if len(phrase_overlap) >= 2:  # At least 2 key phrases match
-            #print(f"   DEBUG MATCH: KEY PHRASE MATCH FOUND")
-            return True
-        
-        # 3. Relaxed word overlap (lower threshold)
-        existing_words = set(existing_lower.split())
-        llm_words = set(llm_lower.split())
-        
-        # Remove common stop words that don't help with matching
-        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'that', 'this'}
-        existing_words = existing_words - stop_words
-        llm_words = llm_words - stop_words
-        
-        if len(existing_words) == 0 or len(llm_words) == 0:
-            #print(f"   DEBUG MATCH: No meaningful words after stop word removal")
-            return False
-        
-        intersection = existing_words.intersection(llm_words)
-        similarity = len(intersection) / max(len(existing_words), len(llm_words))
-        
-        #print(f"   DEBUG MATCH: Word overlap: {intersection}")
-        #print(f"   DEBUG MATCH: Similarity score: {similarity:.2f} (threshold: 0.4)")
-        
-        if similarity > 0.4:  # Lowered from 0.6 to 0.4
-            print(f"   DEBUG MATCH: WORD OVERLAP MATCH FOUND")
-            return True
-        
-        #print(f"   DEBUG MATCH: NO MATCH FOUND")
-        return False
-    
-####    def _hypothesis_matches(self, existing_content: str, llm_content: str) -> bool:
-####        """Check if LLM hypothesis content matches an existing hypothesis"""
-####        # Simple similarity check - could be enhanced
-####        existing_words = set(existing_content.lower().split())
-####        llm_words = set(llm_content.lower().split())
-####        
-####        # If most words match, consider it the same hypothesis
-####        if len(existing_words) == 0 or len(llm_words) == 0:
-####            return False
-####        
-####        intersection = existing_words.intersection(llm_words)
-####        similarity = len(intersection) / max(len(existing_words), len(llm_words))
-####        
-####        return similarity > 0.6  # 60% word overlap threshold
-####
-####        print("Async reasoning engine initialized - ready to start")
+        # Use LLM for semantic matching
+        return self.llm_manager.check_hypothesis_equivalence(existing_content, llm_content)
     
     def _track_reasoning_changes(self, before_items: List[ContextItem]) -> Dict[str, Any]:
         """Track what changed during reasoning cycle"""
@@ -701,7 +747,6 @@ class AsyncReasoningEngine:
             raise RuntimeError("Engine not running")
         
         # Generate unique investigation ID
-        from datetime import datetime
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.investigation_sequence += 1
         investigation_id = f"{base_name}_{timestamp}_{self.investigation_sequence:03d}"
@@ -717,20 +762,7 @@ class AsyncReasoningEngine:
         self.queued_assertions.put(operation)
         print(f"Context clear queued: {investigation_id}")
         return investigation_id
-    
-    def get_investigation_results(self, investigation_id: str) -> Dict[str, Any]:
-        """Get investigation results by ID (SQLite stub)"""
-        # TODO: Retrieve from SQLite database
-        print(f"STUB: Retrieving results for investigation {investigation_id}")
-        return {
-            "investigation_id": investigation_id,
-            "status": "completed",
-            "hypotheses": [],
-            "evidence_count": 0,
-            "confidence_summary": {},
-            "stub": True
-        }
-    
+       
     def get_investigation_results(self, investigation_id: str) -> Dict[str, Any]:
         """Get investigation results by ID (SQLite stub)"""
         # TODO: Retrieve from SQLite database
@@ -980,7 +1012,7 @@ class AsyncReasoningEngine:
                 operation.result_queue.put({'success': False, 'error': str(e)})
     
     def _add_evidence_to_context(self, data: Dict[str, Any]):
-        """Add evidence to context quickly"""
+        """Add evidence to context"""
         evidence_item = ContextItem(
             content=data['content'],
             timestamp=datetime.now(),
@@ -1109,26 +1141,26 @@ class AsyncReasoningEngine:
             # Build domain-focused prompt
             executive_prompt = f"""You are providing a {self.domain_config.output_format} to a {self.domain_config.executive_role}. 
     
-    CURRENT SITUATION ANALYSIS:
-    - Top conclusion: {top_hypothesis.content if top_hypothesis else 'No clear conclusions yet'}
-    - Confidence level: {top_hypothesis.confidence:.0%} if top_hypothesis else 'N/A'
-    - Supporting evidence from {len(evidence_by_source)} data sources
-    - {len(hypotheses)} competing theories analyzed
-    
-    KEY EVIDENCE:
-    {chr(10).join([f"• {e.content}" for e in evidence[:5]])}
-    
-    EXECUTIVE QUERY: {query}
-    
-    INSTRUCTIONS:
-    Provide a crisp, executive-ready response with:
-    1. BOTTOM LINE UP FRONT: One clear conclusion/recommendation
-    2. CONFIDENCE LEVEL: Specific percentage or "high/medium/low" with reasoning
-    3. KEY SUPPORTING FACTS: 2-3 bullet points of strongest evidence
-    4. BUSINESS IMPLICATIONS: What this means for strategy/operations
-    5. NEXT STEPS: What should be done based on this analysis
-    
-    Keep it executive-appropriate: confident, specific, actionable. Avoid hedging language like "given the evidence" or "appears to suggest." Make clear statements backed by data."""
+CURRENT SITUATION ANALYSIS:
+- Top conclusion: {top_hypothesis.content if top_hypothesis else 'No clear conclusions yet'}
+- Confidence level: {top_hypothesis.confidence:.0%} if top_hypothesis else 'N/A'
+- Supporting evidence from {len(evidence_by_source)} data sources
+- {len(hypotheses)} competing theories analyzed
+
+KEY EVIDENCE:
+{chr(10).join([f"• {e.content}" for e in evidence[:5]])}
+
+QUERY: {query}
+
+INSTRUCTIONS:
+Provide a crisp, executive-ready response with: f"\n"
+1. BOTTOM LINE UP FRONT: One clear conclusion/recommendation
+2. CONFIDENCE LEVEL: Specific percentage or "high/medium/low" with reasoning
+3. KEY SUPPORTING FACTS: 2-3 bullet points of strongest evidence
+4. IMPLICATIONS: What this means for strategy/operations
+5. NEXT STEPS: What should be done based on this analysis
+
+Keep it executive-appropriate: confident, specific, actionable. Avoid hedging language like "given the evidence" or "appears to suggest." Make clear statements backed by data."""
     
             context_summary = self._build_context_summary()
             
@@ -1144,7 +1176,6 @@ class AsyncReasoningEngine:
             if operation.result_queue:
                 operation.result_queue.put({'response': f"Analysis failed: {e}"})
 
-
     def _signal_context_change(self, is_external=True):
         """Signal that context has changed (triggers reasoning)"""
         with self.context_lock:
@@ -1156,8 +1187,6 @@ class AsyncReasoningEngine:
         
         # Wake up reasoning thread
         self.context_change_event.set()
-    
-
     
     def _perform_reasoning_cycle(self) -> Dict[str, Any]:
         """Perform reasoning cycle with simple loop counter failsafe"""
@@ -1212,8 +1241,6 @@ class AsyncReasoningEngine:
             cycle_start_version = self.context_version
             new_items = [item for item in self.context_items 
                           if item.reasoning_version < cycle_start_version]
-
-
             
             if not new_items:
                 return {
@@ -1667,14 +1694,8 @@ class AsyncReasoningEngine:
     
     def _apply_reasoning_analysis(self, analysis: str, new_items: List[ContextItem]) -> bool:
         """Apply LLM reasoning decisions directly to context"""
-        import json
-        
-        #print(f"   DEBUG: Full LLM response length: {len(analysis)}")
-        
         try:
             decisions = json.loads(analysis)
-            #print(f"   DEBUG: Parsed JSON keys: {decisions.keys()}")
-            #print(f"   DEBUG: Hypotheses in response: {len(decisions.get('hypotheses', []))}")
         except json.JSONDecodeError as e:
             print(f"   ERROR: JSON parse failed: {e}")
             return False
@@ -1699,24 +1720,23 @@ class AsyncReasoningEngine:
                     if id(item) in matched_hypotheses:
                         continue
                     
-                    # Match hypothesis by content similarity
+                    # Match hypothesis by content similarity using LLM matching
                     if self._hypothesis_matches(item.content, llm_content):
-                        #print(f"   DEBUG: MATCHED '{llm_content[:50]}...' -> '{item.content[:50]}...'")
-                        
+                        print(f"   DUPLICATE ELIMINATED: LLM hypothesis matched existing")
+                        print(f"     Eliminated: {llm_content[:80]}...")
+
                         old_confidence = item.confidence
                         old_status = item.status
                         
-                        # Apply LLM's decisions
-                        item.confidence = float(llm_confidence)
-                        
+                        # Apply LLM's decisions with bounds checking 
+                        item.confidence = max(0.0, min(1.0, float(llm_confidence)))
+
                         if llm_status == 'active':
                             item.status = Status.ACTIVE
                         elif llm_status == 'weakened':
                             item.status = Status.WEAKENED
                         elif llm_status == 'dormant':
                             item.status = Status.DORMANT
-                        
-                        #print(f"   DEBUG: Updated confidence: {old_confidence:.2f} -> {item.confidence:.2f}")
                         
                         # Track changes
                         confidence_change = abs(old_confidence - item.confidence)
@@ -1758,7 +1778,6 @@ class AsyncReasoningEngine:
                     self.context_items.append(hypothesis_item)
                     changes_made = True
         
-        #print(f"   DEBUG: Changes made during reasoning: {changes_made}")
         return changes_made
 
     def _create_hypotheses_from_suggestions(self, suggestions: str):
@@ -1839,11 +1858,11 @@ class AsyncReasoningEngine:
                         hypothesis_content = line
                     break
             
-            # Also capture sentences that look like business hypotheses
-            business_keywords = ['enterprise', 'smb', 'customer', 'revenue', 'performance', 'market', 'sales']
+            # Also capture sentences that look like domain hypotheses
+            domain_keywords = self.domain_config.hypothesis_keywords
             if (not is_hypothesis and 
                 len(line) > 20 and 
-                any(keyword in line.lower() for keyword in business_keywords) and
+                any(keyword in line.lower() for keyword in domain_keywords) and
                 ('should' in line.lower() or 'will' in line.lower() or 'is' in line.lower())):
                 is_hypothesis = True
                 hypothesis_content = line
@@ -1894,7 +1913,7 @@ class AsyncReasoningEngine:
             # Create a fallback hypothesis based on the general suggestion
             if len(suggestions) > 20:
                 fallback_hypothesis = ContextItem(
-                    content=f"Business pattern analysis suggests: {suggestions[:100]}...",
+                    content=f"Analysis suggests: {suggestions[:200]}...",
                     timestamp=datetime.now(),
                     item_type=ItemType.HYPOTHESIS,
                     status=Status.ACTIVE,
@@ -1995,7 +2014,6 @@ class AsyncReasoningEngine:
             importance += 0.3
         return min(1.0, importance)
     
-
     def _extract_tags(self, content: str) -> List[str]:
         """Extract tags from content using domain-specific keywords"""
         content_lower = content.lower()
@@ -2004,7 +2022,7 @@ class AsyncReasoningEngine:
             if any(keyword in content_lower for keyword in keywords):
                 tags.append(tag)
         return tags or ['general']
-        
+    
 def demo_async_reasoning():
     """Demonstrate async reasoning engine"""
     
@@ -2013,14 +2031,11 @@ def demo_async_reasoning():
     
     try:
         # Initialize and start
-
         # Business reasoning (default)
         engine = AsyncReasoningEngine(domain="business", max_context_tokens=3500)
-
         # Criminal investigation
         #engine = AsyncReasoningEngine(domain="criminal_investigation", max_context_tokens=3500)
-
-        #engine = AsyncReasoningEngine(max_context_tokens=3500)
+        
         engine.start()
         
         # Show initial status
@@ -2046,22 +2061,12 @@ def demo_async_reasoning():
             start_time = time.time()
             op_id = engine.add_evidence(content, source, confidence=0.85)
             duration = time.time() - start_time
-            #print(f"   Added in {duration*1000:.1f}ms: {content[:50]}...")
             time.sleep(0.5)  # Brief pause between additions
         
         print("\n   Initial evidence added - monitoring loop will trigger reasoning when ready...")
 
         print("\n2. Testing queries:")
 
-        # Show status after reasoning
-        status = engine.get_status_snapshot()
-        #print(f"\nStatus after initial reasoning:")
-        #print(f"   Total items: {status['total_items']}")
-        #print(f"   Hypotheses: {status['hypotheses']}")
-        #print(f"   Reasoning cycles: {status['stats']['reasoning_cycles']}")
-        #print(f"   Deep thought mode: {status['deep_thought_mode']}")
-        #print(f"   Loop counter: {status['reasoning_loop_count']}/{status['max_reasoning_loops']}")
-        
         # Add more evidence and let reasoning happen
         print("\n" + "="*70)
         print("ADDING MORE EVIDENCE")
@@ -2077,7 +2082,6 @@ def demo_async_reasoning():
         
         for content, source in additional_evidence:
             engine.add_evidence(content, source, confidence=0.88)
-            #print(f"Added: {content}")
             time.sleep(1)
                
         print("\nWaiting for natural completion...")
@@ -2103,61 +2107,7 @@ def demo_async_reasoning():
         print("- Queue: Empty") 
         print("- System: Idle")
 
-        ## Test context clearing with investigation IDs
-        #print("\n5. Testing context clearing with investigation tracking:")
-        #print(f"   Before clear: {len(engine.context_items)} items")
-        #print(f"   Deep thought mode: {engine.deep_thought_mode}")
-        
-        #investigation_id = engine.clear_context("demo_investigation")
-        #print(f"   Investigation ID: {investigation_id}")
-        
-        ## Wait for context clear to be processed (after deep thought completes)
-        #print("   Waiting for context clear to be processed...")
-        #start_wait = time.time()
-        #while len(engine.context_items) > 0 and (time.time() - start_wait) < 10:
-        #    time.sleep(0.5)
-        #    print(".", end="", flush=True)
-        #print()
-        
-        #print(f"   After clear: {len(engine.context_items)} items")
-        #print(f"   Deep thought mode: {engine.deep_thought_mode}")
-        
-        # Test getting investigation results
-        #print(f"\n6. Testing investigation results retrieval:")
-        #results = engine.get_investigation_results(investigation_id)
-        #print(f"   Retrieved results for: {results.get('investigation_id')}")
-        
-        # Also test retrieving results from the initial investigation
-        #print(f"\n7. Testing initial investigation results:")
-        #initial_results = engine.get_investigation_results(initial_investigation_id)
-        #print(f"   Retrieved initial results for: {initial_results.get('investigation_id')}")
-
         print("\nDEMONSTRATION COMPLETE")
-
-        """
-        print("Entering production monitoring mode...")
-        print("Engine ready for new assertions. Press Ctrl+C to exit.")
-
-        # Production monitoring loop with better exception handling
-        try:
-            cycle_count = 0
-            while engine.running:
-                time.sleep(5)
-                cycle_count += 1
-                
-                # Periodic status log (every 30 seconds)
-                if cycle_count % 6 == 0:
-                    status = engine.get_status_snapshot()
-                    print(f"Status: {status['total_items']} items, "
-                        f"{status['hypotheses']} hypotheses, "
-                        f"{'deep thought' if status['deep_thought_mode'] else 'waiting'}")
-
-        except KeyboardInterrupt:
-            print("\nShutdown signal received")
-        except Exception as e:
-            print(f"Unexpected error: {e}")
-
-        """
 
     except KeyboardInterrupt:
         print("\nDemo interrupted by user")
@@ -2170,16 +2120,6 @@ def demo_async_reasoning():
             try:
                 engine.stop()
                 print("Reasoning engine stopped")
-                
-                # Final status
-                final_status = engine.get_status_snapshot()
-                #print(f"\nFinal Status:")
-                #print(f"   Total items: {final_status['total_items']}")
-                #print(f"   Hypotheses: {final_status['hypotheses']}")
-                #print(f"   Total reasoning cycles: {final_status['stats']['reasoning_cycles']}")
-                #print(f"   Assertions processed: {final_status['stats']['assertions_processed']}")
-                #print(f"   Loop counter used: {final_status['reasoning_loop_count']}/{final_status['max_reasoning_loops']}")
-
                 
             except Exception as cleanup_error:
                 print(f"Error during cleanup: {cleanup_error}")
@@ -2197,11 +2137,9 @@ def production_reasoning_server():
     try:
         # Business reasoning (default)
         engine = AsyncReasoningEngine(domain="business", max_context_tokens=5000)
-
         # Criminal investigation
         #engine = AsyncReasoningEngine(domain="criminal_investigation", max_context_tokens=5000)
-
-        #engine = AsyncReasoningEngine(max_context_tokens=5000)
+        
         engine.start()
         
         print("Reasoning engine started - waiting for assertions")
@@ -2244,9 +2182,164 @@ def production_reasoning_server():
                 print("Reasoning engine stopped")
             except Exception as cleanup_error:
                 print(f"Error during engine shutdown: {cleanup_error}")
+def parse_evidence_csv(filename: str) -> List[Dict[str, Any]]:
+    """Parse CSV evidence file into structured commands"""
+    commands = []
     
+    try:
+        with open(filename, 'r', newline='', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            
+            for row_num, row in enumerate(reader, 2):
+                try:
+                    cmd_type = row['type'].strip().lower()
+                    
+                    if cmd_type == 'clear':
+                        investigation_name = row.get('investigation_name', '').strip() or "csv_investigation"
+                        commands.append({
+                            'type': 'clear',
+                            'investigation_name': investigation_name
+                        })
+                    
+                    elif cmd_type == 'evidence':
+                        content = row['content'].strip()
+                        source = row['source'].strip()
+                        confidence_str = row.get('confidence', '0.85').strip()
+                        confidence = float(confidence_str) if confidence_str else 0.85
+                        
+                        if content and source:
+                            commands.append({
+                                'type': 'evidence',
+                                'content': content,
+                                'source': source,
+                                'confidence': confidence
+                            })
+                    
+                    elif cmd_type == 'delay':
+                        delay_str = row.get('delay_seconds', '1.0').strip()
+                        delay_seconds = float(delay_str) if delay_str else 1.0
+                        commands.append({
+                            'type': 'delay',
+                            'seconds': delay_seconds
+                        })
+                    
+                    elif cmd_type == 'query':
+                        query_text = row['content'].strip()
+                        if query_text:
+                            commands.append({
+                                'type': 'query',
+                                'text': query_text
+                            })
+                
+                except ValueError as e:
+                    print(f"Warning: Row {row_num} has invalid number, using defaults")
+                except Exception as e:
+                    print(f"Error parsing row {row_num}: {e}")
+                    continue
+    
+    except FileNotFoundError:
+        raise FileNotFoundError(f"Evidence file '{filename}' not found")
+    
+    return commands
+
+def execute_evidence_csv(engine: AsyncReasoningEngine, filename: str):
+    """Execute commands from CSV evidence file"""
+    commands = parse_evidence_csv(filename)
+    
+    print(f"Loaded {len(commands)} commands from {filename}")
+    print("="*60)
+    
+    for i, cmd in enumerate(commands, 1):
+        cmd_type = cmd['type']
+        print(f"[{i}/{len(commands)}] Executing: {cmd_type.upper()}")
+        
+        if cmd_type == 'clear':
+            investigation_id = engine.clear_context(cmd['investigation_name'])
+            print(f"   Cleared context: {investigation_id}")
+            
+        elif cmd_type == 'evidence':
+            engine.add_evidence(cmd['content'], cmd['source'], cmd['confidence'])
+            print(f"   Added evidence: {cmd['content'][:50]}...")
+            
+        elif cmd_type == 'hypothesis':
+            engine.add_hypothesis(cmd['content'], cmd['confidence'])
+            print(f"   Added hypothesis: {cmd['content'][:50]}...")
+            
+        elif cmd_type == 'delay':
+            print(f"   Waiting {cmd['seconds']} seconds...")
+            time.sleep(cmd['seconds'])
+            
+        elif cmd_type == 'query':
+            # WAIT FOR REASONING TO COMPLETE BEFORE QUERYING
+            print(f"   Querying: {cmd['text']}")
+            print("   Waiting for reasoning to complete before query...")
+            while engine.deep_thought_mode or not engine.queued_assertions.empty():
+                time.sleep(0.1)
+                print(".", end="", flush=True)
+            print()  # New line after dots
+            
+            response = engine.query_context_sync(cmd['text'], timeout=30.0)
+            print(f"   Response: {response}")
+            
+        else:
+            print(f"   Warning: Unknown command type '{cmd_type}' - skipping")
+        
+        time.sleep(0.5)
+    
+    print("="*60)
+    print("CSV execution complete")
+
+def csv_driven_reasoning(csv_file: str, domain: str = "business"):
+    """Run reasoning engine driven by CSV evidence file"""
+    
+    print(f"CSV-DRIVEN REASONING ENGINE")
+    print(f"Evidence file: {csv_file}")
+    print(f"Domain: {domain}")
+    print("=" * 70)
+    
+    try:
+        # Initialize and start engine
+        engine = AsyncReasoningEngine(max_context_tokens=3500, domain=domain)
+        engine.start()
+        
+        # Execute CSV file
+        execute_evidence_csv(engine, csv_file)
+        
+        # Wait for any remaining processing
+        print("\nWaiting for reasoning to complete...")
+        while engine.deep_thought_mode or not engine.queued_assertions.empty():
+            time.sleep(0.1)
+            if engine.deep_thought_mode:
+                print(".", end="", flush=True)
+        
+        print(f"\nReasoning complete!")
+        
+        # Final status
+        status = engine.get_status_snapshot()
+        print(f"\nFinal Status:")
+        print(f"   Total items: {status['total_items']}")
+        print(f"   Hypotheses: {status['hypotheses']}")
+        print(f"   Reasoning cycles: {status['stats']['reasoning_cycles']}")
+        
+    except Exception as e:
+        print(f"Error: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        if 'engine' in locals():
+            engine.stop()
+            print("Engine stopped")
+
 if __name__ == "__main__":
-    print("Run with 'python -u reasoning.py' for real-time output")
-    demo_async_reasoning()
+    import sys
+    
+    # Command line usage: python -u reasoning.py evidence.csv [domain]
+    if len(sys.argv) >= 2:
+        csv_file = sys.argv[1]
+        domain = sys.argv[2] if len(sys.argv) > 2 else "business"
+        csv_driven_reasoning(csv_file, domain)
+    else:
+        print("Usage: python reasoning.py <evidence.csv> [domain]")
+        print("Example: python reasoning.py evidence_business.csv business")
 
-
+#    demo_async_reasoning()
