@@ -1,0 +1,19 @@
+type,content,source,confidence,delay_seconds,investigation_name
+clear,,,,,"demo_investigation"
+evidence,"Enterprise Q4 sales exceeded targets by 30%","sales_system",0.85,,
+delay,,,,,0.5
+evidence,"SMB customer acquisition costs increased 50%","sales_analytics",0.85,,
+delay,,,,,0.5
+evidence,"Server response times degraded during peak load","monitoring",0.85,,
+delay,,,,,0.5
+evidence,"Database optimization improved query performance by 60%","engineering",0.85,,
+delay,,,,,1
+evidence,"Critical infrastructure failure detected","alerts",0.88,,
+delay,,,,,1
+evidence,"Enterprise customers reporting satisfaction improvements","customer_success",0.88,,
+delay,,,,,1
+evidence,"New competitor entered SMB market","market_intelligence",0.88,,
+delay,,,,,1
+evidence,"System performance metrics normalized after fixes","monitoring",0.88,,
+delay,,,,,2
+query,"Based on all evidence, what are your key conclusions?",,,,
