@@ -1050,7 +1050,7 @@ CURRENT SITUATION ANALYSIS:
 - {len(hypotheses)} competing theories analyzed
 
 KEY EVIDENCE:
-{chr(10).join([f"â€¢ {e.content}" for e in evidence[:5]])}
+{chr(10).join([f"\u2022 {e.content}" for e in evidence[:5]])}
 
 QUERY: {query}
 
@@ -1594,11 +1594,11 @@ Keep it executive-appropriate: confident, specific, actionable. Avoid hedging la
         
         if is_hypothesis and len(hypothesis_content) > 15:
             # Clean up common prefixes
-            prefixes_to_remove = ['- ', 'â€¢ ', '1. ', '2. ', '3. ', '4. ', '5. ']
+            prefixes_to_remove = ['- ', '\u2022 ', '1. ', '2. ', '3. ', '4. ', '5. ']
             for prefix in prefixes_to_remove:
                 if hypothesis_content.startswith(prefix):
                     hypothesis_content = hypothesis_content[len(prefix):].strip()
-            
+    
             # Determine confidence based on language used
             confidence = 0.6  # Default
             if any(word in hypothesis_content.lower() for word in ['strong', 'clear', 'evident', 'definite']):
