@@ -689,7 +689,7 @@ class AsyncReasoningEngine:
         self.reasoning_thread.start()
         
         print("Async reasoning engine started")
-        print("   Context processor: handles assertions quickly")
+        print("   Context processor: handles assertions without blocking")
         print("   Reasoning monitor: watches for context changes")
     
     def stop(self):
@@ -727,20 +727,20 @@ class AsyncReasoningEngine:
         print(f"Evidence queued: {content[:50]}...")
         return operation.operation_id
     
-    def add_hypothesis(self, content: str, confidence: float = 0.6) -> str:
-        """Add hypothesis to the single queue"""
+    def add_hypothesis(self, content: str, confidence: float = 0.6, source: str = "external_hypothesis") -> str:
+        """Add hypothesis to the single queue with source parameter"""
         if not self.running:
             raise RuntimeError("Engine not running")
         
         operation = ContextOperation(
             operation_type=OperationType.ADD_HYPOTHESIS,
-            data={'content': content, 'confidence': confidence}
+            data={'content': content, 'confidence': confidence, 'source': source}  # Add source
         )
         
         self.queued_assertions.put(operation)
-        print(f"Hypothesis queued: {content[:50]}...")
+        print(f"Hypothesis queued: {content[:50]}... (from {source})")
         return operation.operation_id
-    
+  
     def clear_context(self, base_name: str = "investigation") -> str:
         """Clear all context - generates investigation ID and queues to single queue"""
         if not self.running:
@@ -796,6 +796,61 @@ class AsyncReasoningEngine:
         except queue.Empty:
             return f"Query timeout after {timeout}s"
     
+
+    def get_context_summary(self) -> Dict[str, Any]:
+        """Get context summary through public API (for debug and monitoring)"""
+        with self.context_lock:
+            hypotheses = [i for i in self.context_items if i.item_type == ItemType.HYPOTHESIS]
+            evidence = [i for i in self.context_items if i.item_type == ItemType.EVIDENCE]
+            
+            context_items = []
+            for item in self.context_items:
+                # Truncate content for summary
+                content = item.content[:100] + "..." if len(item.content) > 100 else item.content
+                
+                context_items.append({
+                    'content': content,
+                    'type': item.item_type.value,
+                    'status': item.status.value,
+                    'confidence': item.confidence,
+                    'source': item.source,
+                    'timestamp': item.timestamp.isoformat(),
+                    'reasoning_version': item.reasoning_version,
+                    'importance': item.importance,
+                    'tags': item.tags
+                })
+            
+            return {
+                'context_items': context_items,
+                'total_items': len(self.context_items),
+                'hypotheses_count': len(hypotheses),
+                'evidence_count': len(evidence),
+                'context_version': self.context_version,
+                'estimated_tokens': sum(item.token_estimate() for item in self.context_items)
+            }
+
+    def reconfigure_domain(self, new_domain: str) -> bool:
+        """Reconfigure domain without full restart"""
+        try:
+            # Validate domain
+            if new_domain not in ["business", "criminal_investigation"]:
+                raise ValueError(f"Invalid domain: {new_domain}")
+            
+            # Update domain config
+            old_domain = getattr(self.domain_config, 'context_description', 'unknown')
+            self.domain_config = DomainConfig(new_domain)
+            
+            # Update LLM manager with new domain config
+            self.llm_manager.domain_config = self.domain_config
+            
+            print(f"Domain reconfigured from '{old_domain}' to '{new_domain}'")
+            return True
+            
+        except Exception as e:
+            print(f"Domain reconfiguration failed: {e}")
+            return False
+
+
     def toggle_full_context_display(self, show: bool = True):
         """Toggle display of full context window at each reasoning cycle"""
         self.show_full_context = show
@@ -987,7 +1042,7 @@ class AsyncReasoningEngine:
         print("Reasoning monitor stopped")
     
     def _process_context_operation(self, operation: ContextOperation):
-        """Process context operations quickly (no LLM calls)"""
+        """Process context operations without LLM calls"""
         
         try:
             if operation.operation_type == OperationType.ADD_EVIDENCE:
@@ -1032,7 +1087,7 @@ class AsyncReasoningEngine:
         print(f"Evidence added: {data['content'][:50]}... (from {data['source']})")
     
     def _add_hypothesis_to_context(self, data: Dict[str, Any]):
-        """Add hypothesis to context quickly"""
+        """Add hypothesis to context """
         hypothesis_item = ContextItem(
             content=data['content'],
             timestamp=datetime.now(),
@@ -1040,7 +1095,7 @@ class AsyncReasoningEngine:
             status=Status.ACTIVE,
             confidence=data['confidence'],
             importance=0.9,
-            source="external_hypothesis",
+            source=data.get('source', 'external_hypothesis'),  # Use provided source
             tags=["hypothesis"],
             reasoning_version=0
         )
@@ -1048,7 +1103,7 @@ class AsyncReasoningEngine:
         with self.context_lock:
             self.context_items.append(hypothesis_item)
         
-        print(f"Hypothesis added: {data['content'][:50]}...")
+        print(f"Hypothesis added: {data['content'][:50]}... (from {data.get('source', 'unknown')})")
     
     def _clear_context(self, data: Dict[str, Any]):
         """Clear all context items and store investigation results"""
@@ -2048,7 +2103,7 @@ def demo_async_reasoning():
         initial_investigation_id = engine.clear_context("demo_investigation")
         print(f"Started investigation: {initial_investigation_id}")
         
-        # Add some initial evidence quickly
+        # Add some initial evidence 
         evidence_items = [
             ("Enterprise Q4 sales exceeded targets by 30%", "sales_system"),
             ("SMB customer acquisition costs increased 50%", "sales_analytics"),

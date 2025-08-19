@@ -47,13 +47,15 @@ async def lifespan(app: FastAPI):
     
     # Startup
     try:
-        reasoning_engine = AsyncReasoningEngine(max_context_tokens=5000)
+        # Default to business domain, but can be changed via API
+        reasoning_engine = AsyncReasoningEngine(max_context_tokens=5000, domain="business")
         reasoning_engine.start()
         
-        logging.info("Reasoning engine started successfully")
+        logging.info("Reasoning engine started successfully (business domain)")
         print("Reasoning Engine API started")
         print("   Endpoints available at /docs")
-        print("   Reasoning engine: running")
+        print("   Default domain: business")
+        print("   Use POST /config/domain to change domain")
         
         yield  # Application runs here
         
@@ -106,7 +108,59 @@ class ClearContextRequest(BaseModel):
 class ConfigurationRequest(BaseModel):
     max_loops: int = Field(..., ge=1, le=100, description="Maximum reasoning loops per session")
 
-# NEW: Response models for missing endpoints
+# Domain configuration support
+class DomainConfigRequest(BaseModel):
+    domain: str = Field(..., description="Domain type: 'business' or 'criminal_investigation'")
+
+@app.post("/config/domain", summary="Configure Reasoning Domain")
+async def configure_domain(config: DomainConfigRequest):
+    """Configure the reasoning domain without restart."""
+    if not reasoning_engine or not reasoning_engine.running:
+        raise HTTPException(status_code=503, detail="Reasoning engine not available")
+    
+    if config.domain not in ["business", "criminal_investigation"]:
+        raise HTTPException(status_code=400, detail="Invalid domain. Use 'business' or 'criminal_investigation'")
+    
+    try:
+        # Use new reconfiguration method
+        success = reasoning_engine.reconfigure_domain(config.domain)
+        
+        if not success:
+            raise HTTPException(status_code=500, detail="Domain reconfiguration failed")
+        
+        logging.info(f"Domain reconfigured to: {config.domain}")
+        
+        return {
+            "status": "success",
+            "message": f"Domain reconfigured to {config.domain} (no restart required)",
+            "domain": config.domain,
+            "timestamp": datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logging.error(f"Failed to configure domain: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to configure domain: {str(e)}")
+
+# Enhanced state validation
+def validate_engine_state_for_operation(operation_type: str = "general"):
+    """Enhanced state validation before operations"""
+    if not reasoning_engine or not reasoning_engine.running:
+        raise HTTPException(status_code=503, detail="Reasoning engine not available")
+    
+    status = reasoning_engine.get_status_snapshot()
+    
+    # Provide helpful warnings for different operation types
+    if operation_type == "query":
+        if status.get('deep_thought_mode', False):
+            deep_thought_duration = status.get('deep_thought_duration_seconds', 0)
+            if deep_thought_duration > 30:
+                # Warning but allow - queries can still work during deep thought
+                logging.warning(f"Query during deep thought ({deep_thought_duration:.1f}s) - may be slower")
+    
+    # Could add more operation-specific validations here
+    return status
+
+# Response models for missing endpoints
 class ClearContextResponse(BaseModel):
     status: str
     investigation_id: str
@@ -201,35 +255,31 @@ async def add_evidence(evidence: EvidenceRequest):
 
 @app.post("/hypothesis", response_model=HypothesisResponse, summary="Add Hypothesis") 
 async def add_hypothesis(hypothesis: HypothesisRequest):
-    """
-    Add a hypothesis to the reasoning engine.
-    
-    Hypotheses can be added by external systems or human analysts.
-    """
+    """Add a hypothesis to the reasoning engine."""
     if not reasoning_engine or not reasoning_engine.running:
         raise HTTPException(status_code=503, detail="Reasoning engine not available")
     
     try:
-        # NOTE: The reasoning engine's add_hypothesis method only takes content and confidence
-        # The source is hardcoded as "external_hypothesis" in _add_hypothesis_to_context
+        # Now properly pass the source parameter
         operation_id = reasoning_engine.add_hypothesis(
             content=hypothesis.content,
-            confidence=hypothesis.confidence
+            confidence=hypothesis.confidence,
+            source=hypothesis.source  # Now supported!
         )
         
-        logging.info(f"Hypothesis added: {hypothesis.content[:50]}...")
+        logging.info(f"Hypothesis added: {hypothesis.content[:50]}... from {hypothesis.source}")
         
         return HypothesisResponse(
             status="queued",
             operation_id=operation_id,
-            message="Hypothesis added successfully"
+            message=f"Hypothesis added from source: {hypothesis.source}"
         )
         
     except Exception as e:
         logging.error(f"Failed to add hypothesis: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to add hypothesis: {str(e)}")
 
-# NEW: Clear context endpoint
+# Clear context endpoint
 @app.post("/context/clear", response_model=ClearContextResponse, summary="Clear Context")
 async def clear_context(request: ClearContextRequest):
     """
@@ -256,14 +306,13 @@ async def clear_context(request: ClearContextRequest):
         logging.error(f"Failed to clear context: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to clear context: {str(e)}")
 
-# NEW: Get investigation results endpoint
+# Get investigation results endpoint
 @app.get("/investigations/{investigation_id}", response_model=InvestigationResults, summary="Get Investigation Results")
 async def get_investigation_results(investigation_id: str):
     """
     Retrieve results from a completed investigation.
     
-    Returns the final state of hypotheses, evidence, and reasoning cycles
-    from when the context was cleared.
+    NOTE: Investigation storage is currently stubbed - returns limited data.
     """
     if not reasoning_engine:
         raise HTTPException(status_code=503, detail="Reasoning engine not available")
@@ -274,6 +323,24 @@ async def get_investigation_results(investigation_id: str):
         if not results:
             raise HTTPException(status_code=404, detail=f"Investigation {investigation_id} not found")
         
+        # Handle stub implementation gracefully
+        if results.get('stub', False):
+            # Convert stub format to expected response format
+            return InvestigationResults(
+                investigation_id=results['investigation_id'],
+                status=results['status'],
+                timestamp=None,  # Not available in stub
+                total_items=0,
+                evidence_count=results.get('evidence_count', 0),
+                hypotheses_count=len(results.get('hypotheses', [])),
+                reasoning_cycles=0,  # Not available in stub
+                hypotheses=results.get('hypotheses', []),
+                evidence_summary=[],  # Not available in stub
+                stats={},  # Not available in stub
+                stub=True
+            )
+        
+        # Future: when full implementation exists, return complete data
         return InvestigationResults(**results)
         
     except Exception as e:
@@ -282,16 +349,10 @@ async def get_investigation_results(investigation_id: str):
 
 @app.post("/query", response_model=QueryResponse, summary="Query Reasoning State")
 async def query_context(query: QueryRequest):
-    """
-    Query the current reasoning state with natural language.
+    """Query the current reasoning state with natural language."""
     
-    Examples:
-    - "What evidence supports enterprise focus?"
-    - "Are there any technical issues?"
-    - "What contradictions exist in the data?"
-    """
-    if not reasoning_engine or not reasoning_engine.running:
-        raise HTTPException(status_code=503, detail="Reasoning engine not available")
+    # Enhanced state validation with warnings
+    validate_engine_state_for_operation("query")
     
     try:
         start_time = datetime.now()
@@ -375,7 +436,7 @@ async def force_stop_reasoning(request: ForceStopRequest):
         logging.error(f"Failed to stop reasoning: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to stop reasoning: {str(e)}")
 
-# NEW: Configure maximum reasoning loops
+# Configure maximum reasoning loops
 @app.post("/config/max_loops", summary="Configure Maximum Reasoning Loops")
 async def configure_max_loops(config: ConfigurationRequest):
     """
@@ -513,38 +574,15 @@ async def monitoring_webhook(payload: Dict[str, Any]):
 
 @app.get("/debug/context", summary="Debug: Get Full Context")
 async def debug_get_context():
-    """
-    Debug endpoint to view the full reasoning context.
-    Should be disabled in production for security.
-    """
+    """Debug endpoint to view the full reasoning context."""
     if not reasoning_engine:
         raise HTTPException(status_code=503, detail="Reasoning engine not available")
     
     try:
-        # Check if engine has required attributes
-        if not hasattr(reasoning_engine, 'context_lock') or not hasattr(reasoning_engine, 'context_items'):
-            raise HTTPException(status_code=500, detail="Reasoning engine missing required attributes")
+        # Use new public method instead of direct attribute access
+        context_summary = reasoning_engine.get_context_summary()
         
-        with reasoning_engine.context_lock:
-            context_items = []
-            for item in reasoning_engine.context_items:
-                context_items.append({
-                    'content': item.content[:100] + "..." if len(item.content) > 100 else item.content,
-                    'type': item.item_type.value,
-                    'status': item.status.value,
-                    'confidence': item.confidence,
-                    'source': item.source,
-                    'timestamp': item.timestamp.isoformat(),
-                    'reasoning_version': item.reasoning_version,
-                    'importance': item.importance,
-                    'tags': item.tags
-                })
-        
-        return {
-            "context_items": context_items,
-            "total_items": len(context_items),
-            "context_version": reasoning_engine.context_version if hasattr(reasoning_engine, 'context_version') else None
-        }
+        return context_summary
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Debug failed: {str(e)}")
