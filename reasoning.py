@@ -233,8 +233,12 @@ EVIDENCE ANALYSIS:
 DETECTIVE PRINCIPLES:
 - Always suspect the closest person first (family, partners, business associates)
 - Follow the money (who benefits financially?)
-- Use DNA, forensics, and timeline to eliminate/confirm suspects
-- Name the specific person and their specific motive
+- Generate hypotheses for every person mentioned in evidence, regardless of alibis
+- Treat alibis as claims requiring verification, not established facts
+- Hospital shifts and work schedules can have gaps or be circumvented
+- Use exact names from evidence - do not invent placeholder names
+- Maintain multiple working theories - avoid tunnel vision on obvious suspects
+- Keep confidence modest early in investigation to prevent rush to judgment
 
 Each hypothesis should:
 - Provide detailed explanation of who committed the crime and why
@@ -452,10 +456,10 @@ Respond with JSON in this exact format:
         similarity = len(intersection) / max(len(existing_words), len(llm_words))
         
         return similarity > HYPOTHESIS_OVERLAP_THRESHOLD
-
-    def generate_initial_hypotheses(self, evidence_items: str) -> str:
+    
+    def generate_hypotheses_from_evidence(self, evidence_items: str) -> str:
         """LLM generates initial hypotheses from evidence using domain config"""
-        
+
         hypothesis_prompt = f"""
 {self.domain_config.hypothesis_instructions}
 
@@ -1275,32 +1279,35 @@ Keep it executive-appropriate: confident, specific, actionable. Avoid hedging la
         with self.context_lock:
             cycle_start_version = self.context_version
             new_items = [item for item in self.context_items 
-                          if item.reasoning_version < cycle_start_version]
-            context_summary = self._build_context_summary()
-            hypotheses = [i for i in self.context_items if i.item_type == ItemType.HYPOTHESIS]
+                            if item.reasoning_version < cycle_start_version]
         
-        # Generate initial hypotheses if none exist
-        if not hypotheses and new_items:
-            print(f"   Generating initial hypotheses from evidence...")
-            self._generate_initial_hypotheses(new_items)
+        # Always generate hypotheses when there's new evidence
+        evidence_items = [item for item in new_items if item.item_type == ItemType.EVIDENCE]
+        if evidence_items:
+            print(f"   Generating hypotheses from evidence...")
+            self._generate_hypotheses_from_evidence(evidence_items)
         
-        # Reason about new evidence against existing hypotheses
-        elif hypotheses and new_items:
-            print(f"   Analyzing new evidence against existing hypotheses...")
-            self._reason_about_new_items(context_summary, new_items)
+        # Then reason about ALL hypotheses (including the ones just created)
+        with self.context_lock:
+            updated_hypotheses = [i for i in self.context_items if i.item_type == ItemType.HYPOTHESIS]
+            updated_context_summary = self._build_context_summary()  # Rebuild with new hypotheses
+            
+        if updated_hypotheses and new_items:
+            print(f"   Analyzing new evidence against all hypotheses...")
+            self._reason_about_new_items(updated_context_summary, new_items)
         
         # Perform compression if needed
         total_tokens = sum(item.token_estimate() for item in self.context_items)
         if total_tokens > self.compression_threshold:
             print(f"   Performing context compression...")
             self._perform_compression()
-        
+    
         # Mark items as processed
         with self.context_lock:
             for item in new_items:
                 item.reasoning_version = cycle_start_version
             self.last_reasoned_version = cycle_start_version
-
+        
     def _evaluate_reasoning_completion(self, context_hash_before: str) -> Dict[str, Any]:
         """Evaluate if reasoning cycle is complete and should continue"""
         
@@ -1364,15 +1371,15 @@ Keep it executive-appropriate: confident, specific, actionable. Avoid hedging la
     # LLM INTEGRATION - Hypothesis generation and reasoning
     # ========================================================================
 
-    def _generate_initial_hypotheses(self, evidence_items: List[ContextItem]):
-        """Generate initial hypotheses from evidence using LLM"""
-        print("   Generating initial hypotheses...")
+    def _generate_hypotheses_from_evidence(self, evidence_items: List[ContextItem]):
+        """Generate hypotheses from evidence using LLM"""
+        print("   Generating hypotheses...")
         
         # Build clean evidence data for LLM
         evidence_summary = "\n".join([item.to_tuple_string() for item in evidence_items])
         
         # Use LLM to generate hypothesis suggestions
-        hypothesis_suggestions = self.llm_manager.generate_initial_hypotheses(
+        hypothesis_suggestions = self.llm_manager.generate_hypotheses_from_evidence(
             evidence_items=evidence_summary
         )
         
@@ -1381,8 +1388,8 @@ Keep it executive-appropriate: confident, specific, actionable. Avoid hedging la
         # Parse and create hypotheses
         self._create_hypotheses_from_suggestions(hypothesis_suggestions)
         
-        self.stats['hypotheses_generated'] += 1
-    
+        self.stats['hypotheses_generated'] += 1    
+        
     def _reason_about_new_items(self, context_summary: str, new_items: List[ContextItem]) -> bool:
         """Reason about new items using LLM - returns True if changes made"""
         print("   Reasoning about new items against existing context...")
